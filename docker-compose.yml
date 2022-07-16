@@ -1,0 +1,18 @@
+version: "3.9"
+
+services:
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile.developnment
+    volumes:
+      - .:/app
+      - /app/node_modules/
+  proxy:
+    build:
+      context: ./.nginx
+      dockerfile: Dockerfile.developnment
+    depends_on:
+      - web
+    ports:
+      - "3030:8080"

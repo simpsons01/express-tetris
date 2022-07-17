@@ -1,13 +1,13 @@
 import env from "./env";
-import { createServer } from "http";
+import http from "http";
 import cors from "cors";
-import express, { Express } from "express";
+import express from "express";
 import rootRouter from "./routes/root";
 import gameRouter from "./routes/game";
 import { TetrisGameSocketService } from "./services/";
 
-const app: Express = express();
-const httpServer = createServer(app);
+const app = express();
+const httpServer = http.createServer(app);
 // global middleware
 app.use(
   cors({
@@ -15,9 +15,7 @@ app.use(
   })
 );
 // router
-app.use("/health-check", (req, res) => {
-  res.send("it is healthy");
-});
+app.use("/health-check", (req, res) => res.send("it is healthy"));
 app.use("/", rootRouter);
 app.use("/game", gameRouter);
 // socket

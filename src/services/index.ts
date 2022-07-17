@@ -1,1 +1,3 @@
-export {};
+import SocketService from "./socket";
+
+export { SocketService };

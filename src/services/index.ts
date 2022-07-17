@@ -1,3 +1,2 @@
-import SocketService from "./socket";
-
-export { SocketService };
+export * from "./socket";
+export * from "./room";

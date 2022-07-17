@@ -1,7 +1,3 @@
-export interface AnyObject<T = any> {
-  [key: string]: T;
-}
-
 export const logger = {
   log: <T = unknown>(...args: Array<T>): void => {
     console.log(...args);
@@ -13,3 +9,7 @@ export const logger = {
     console.error(...args);
   },
 };
+
+export interface AnyObject<T = any> {
+  [key: string]: T;
+}

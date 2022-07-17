@@ -7,3 +7,5 @@ const envPath =
     : path.join(`${__dirname}/../.env.production`);
 
 dotenv.config({ path: envPath });
+
+export default process.env;

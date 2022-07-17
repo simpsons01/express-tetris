@@ -15,11 +15,17 @@ app.use(
   })
 );
 // router
-app.use("/health-check", (req, res) => res.send("server is running"));
+app.use("/health-check", (req, res) => {
+  res.send("it is healthy");
+});
 app.use("/", rootRouter);
-//app.use("/game", gameRouter);
+app.use("/game", gameRouter);
 // socket
-const tetrisGameSocket = new TetrisGameSocketService(httpServer, {});
+const tetrisGameSocket = new TetrisGameSocketService(httpServer, {
+  cors: {
+    origin: env.ALLOW_ORIGIN,
+  },
+});
 tetrisGameSocket.listen();
 
 const port = process.env.PORT || 3030;

@@ -1,31 +1,19 @@
 import { Router } from "express";
-import { v4 as uuidv4 } from "uuid";
-import { isEmpty } from "ramda";
-import RoomStore, { createParticipant, createTetrisRoom } from "../services/room";
+import { isNil } from "ramda";
+import gameSocket from "../services/socket/game";
 
 const router = Router();
 
-router.get("/join", function (req, res) {
-  const roomStore = RoomStore.getStore();
-  // TODO: 要寫一個創建隨機名字的方法
-  const randomName = uuidv4();
-  const participant = createParticipant(randomName);
-  const notFullRoomId = roomStore.findRoomIdNotFull();
-  if (isEmpty(notFullRoomId)) {
-    const room = createTetrisRoom();
-    room.addParticipant(participant);
-    roomStore.addRoom(room);
-    res.json({
-      participant,
-      roomId: room.id,
-    });
-  } else {
-    const roomId = notFullRoomId[0];
-    roomStore.addParticipantToRoom(roomId, participant);
-    res.json({
-      participant,
-      roomId,
-    });
+router.get("/join", async function (req, res) {
+  const gameSocketInstance = gameSocket.getInstance();
+  if (gameSocketInstance) {
+    const notEmptyRoomId = gameSocketInstance.getNotEmptyRoomId();
+    if (!isNil(notEmptyRoomId)) {
+      res.send(notEmptyRoomId);
+    } else {
+      const roomId = await gameSocketInstance.createRoom();
+      res.send(roomId);
+    }
   }
 });
 

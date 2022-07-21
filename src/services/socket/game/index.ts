@@ -4,7 +4,7 @@ import { createRoom, createRoomStore, IRoomStore, createParticipant } from "./ro
 import { v4 as uuidv4 } from "uuid";
 import { Server as HttpServer } from "http";
 import { AnyObject } from "../../../util";
-import sessionMiddleware from "../../session";
+import sessionMiddleware from "../../../util/session";
 import { Request, Response, NextFunction } from "express";
 import { isNil } from "ramda";
 
@@ -65,6 +65,7 @@ class GameSocketService {
         logger.log("user is connected");
       }
       socket.on("disconnect", () => {
+        logger.log("user is disconnect");
         const handleDisconnect = () => {
           room.removeParticipant(socket.id);
           if (room.isParticipantEmpty()) {

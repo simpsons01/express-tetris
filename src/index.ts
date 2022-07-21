@@ -6,7 +6,7 @@ import bodyParser from "body-parser";
 import rootRouter from "./routes/root";
 import gameRouter from "./routes/game";
 import gameSocket from "./services/socket/game/index";
-import sessionMiddleware from "./services/session";
+import sessionMiddleware from "./util/session";
 
 const app = express();
 const httpServer = http.createServer(app);

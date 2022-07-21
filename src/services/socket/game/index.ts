@@ -1,9 +1,12 @@
 import { logger } from "../../../util";
 import { Namespace, Server as SocketServer } from "socket.io";
-import { createRoom, createRoomStore, IRoomStore } from "./room";
+import { createRoom, createRoomStore, IRoomStore, createParticipant } from "./room";
 import { v4 as uuidv4 } from "uuid";
 import { Server as HttpServer } from "http";
 import { AnyObject } from "../../../util";
+import sessionMiddleware from "../../session";
+import { Request, Response, NextFunction } from "express";
+import { isNil } from "ramda";
 
 const ROOM_DEFAULT_PARTICIPANT_NUM = 2;
 const ROOM_DEFAULT_LEFT_SEC = 60;
@@ -29,37 +32,56 @@ class GameSocketService {
       leftSec: ROOM_DEFAULT_LEFT_SEC,
     });
     this.roomStore.addRoom(room);
+    io.use((socket, next) =>
+      sessionMiddleware(socket.request as Request, {} as Response, next as NextFunction)
+    );
     io.on("connection", (socket) => {
-      socket.on("participant-join", (participant, callback) => {
-        room.addParticipant(participant);
-        callback();
-      });
-
-      socket.on("participant-leave", (participantId, callback) => {
-        room.removeParticipant(participantId);
-        callback();
-      });
-
-      socket.on("check-participant-isfull", () => {
-        if (room.isParticipantFull()) {
-          (io as Namespace).emit("game-start");
-          room.startCountDown(
-            (sec) => {
-              (io as Namespace).emit("game-countdown", sec);
-            },
-            () => {
-              (io as Namespace).emit("game-over");
-            }
-          );
-        }
-      });
-
-      socket.on("check-participant-isEmpty", () => {
-        if (room.isParticipantEmpty()) {
-          (io as Namespace).disconnectSockets();
-          (io as Namespace).removeAllListeners();
-          this.roomStore.removeRoom(room.id);
-          io = null;
+      const user = socket.request.session.user;
+      logger.log(user);
+      if (isNil(user)) {
+        socket.disconnect();
+        return;
+      }
+      if (!user.socketId) {
+        user.socketId = socket.id;
+        user.roomId = room.id;
+        socket.request.session.save(() => {
+          socket.data.roomId = room.id;
+          const participant = createParticipant(user.name, socket.id);
+          room.addParticipant(participant);
+          if (room.isParticipantFull()) {
+            (io as Namespace).emit("game-start");
+            room.startCountDown(
+              (sec) => {
+                (io as Namespace).emit("game-countdown", sec);
+              },
+              () => {
+                (io as Namespace).emit("game-over");
+              }
+            );
+          }
+        });
+      } else {
+        logger.log("user is connected");
+      }
+      socket.on("disconnect", () => {
+        const handleDisconnect = () => {
+          room.removeParticipant(socket.id);
+          if (room.isParticipantEmpty()) {
+            (io as Namespace).disconnectSockets();
+            this.roomStore.removeRoom(socket.data.roomId);
+            io = null;
+          }
+        };
+        const user = socket.request.session.user;
+        if (!isNil(user)) {
+          user.socketId = "";
+          user.roomId = "";
+          socket.request.session.save(() => {
+            handleDisconnect();
+          });
+        } else {
+          handleDisconnect();
         }
       });
 
@@ -80,6 +102,7 @@ class GameSocketService {
         socket.broadcast.emit("opponent-nextScoreUpdated", score);
       });
     });
+
     return roomId;
   }
 }
@@ -87,12 +110,13 @@ class GameSocketService {
 let gameSocketInstance: GameSocketService | undefined;
 
 export default {
-  initialize(httpServer: HttpServer, options: SocketServerOptions): void {
+  initialize(httpServer: HttpServer, options: SocketServerOptions): GameSocketService {
     if (gameSocketInstance === undefined) {
       gameSocketInstance = new GameSocketService(httpServer, options);
     } else {
       logger.warn("tetris game socket service is initialized");
     }
+    return gameSocketInstance;
   },
   getInstance(): GameSocketService | undefined {
     if (gameSocketInstance === undefined) {

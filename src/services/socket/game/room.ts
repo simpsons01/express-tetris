@@ -1,4 +1,3 @@
-import { v4 as uuidv4 } from "uuid";
 import { clone, is } from "ramda";
 
 export interface IParticipant {
@@ -13,12 +12,13 @@ export interface IParticipant {
 }
 
 class Participant implements IParticipant {
-  id = uuidv4();
+  id: string;
   basic = { name: "" };
   game = { score: 0 };
 
-  constructor(name: string) {
+  constructor(name: string, id: string) {
     this.basic.name = name;
+    this.id = id;
   }
 
   updateScore(score: number): void {
@@ -35,14 +35,18 @@ export interface IRoom {
   removeParticipant(participantId: string): void;
   isParticipantFull(): boolean;
   isParticipantEmpty(): boolean;
-  startCountDown(onCountDown?: (leftSec: number) => any, onComplete?: (...args: Array<any>) => any): void;
+  startCountDown(
+    onCountDown?: (leftSec: number) => void,
+    onComplete?: (...args: Array<unknown>) => void
+  ): void;
   updateParticipantScore(participantId: string, score: number): void;
   getResult(): { winner: IParticipant; loser: IParticipant };
 }
 
+type intervalTimer = ReturnType<typeof setInterval>;
 class Room implements IRoom {
   id: string;
-  timer: ReturnType<typeof setInterval> | null = null;
+  timer: intervalTimer | null = null;
   leftSec: number;
   participantLimitNum: number;
   participants: Array<IParticipant> = [];
@@ -53,12 +57,16 @@ class Room implements IRoom {
     this.leftSec = leftSec;
   }
 
-  startCountDown(onCountDown?: (leftSec: number) => void, onComplete?: (...args: Array<unknown>) => void) {
+  startCountDown(
+    onCountDown?: (leftSec: number) => void,
+    onComplete?: (...args: Array<unknown>) => void
+  ) {
     this.timer = setInterval(() => {
       this.leftSec -= 1;
       if (is(Function, onCountDown)) onCountDown(this.leftSec);
       if (this.leftSec === 0) {
         if (is(Function, onComplete)) onComplete();
+        clearInterval(this.timer as intervalTimer);
         this.timer = null;
       }
     }, 1000);
@@ -129,7 +137,8 @@ class RoomStore implements IRoomStore {
   }
 }
 
-export const createParticipant = (name: IParticipant["basic"]["name"]): IParticipant => new Participant(name);
+export const createParticipant = (name: string, id: string): IParticipant =>
+  new Participant(name, id);
 
 export const createRoom = (roomArg: Pick<IRoom, "id" | "leftSec" | "participantLimitNum">): IRoom =>
   new Room(roomArg.id, roomArg.participantLimitNum, roomArg.leftSec);

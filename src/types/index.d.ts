@@ -1,10 +1,14 @@
-export {};
+import { SessionUser } from "../util";
+import { Session, SessionData } from "express-session";
 
 declare module "express-session" {
   interface SessionData {
-    user: {
-      name: string;
-      inGame: boolean;
-    } | null;
+    user: SessionUser | null;
+  }
+}
+
+declare module "http" {
+  interface IncomingMessage {
+    session: Session & SessionData;
   }
 }

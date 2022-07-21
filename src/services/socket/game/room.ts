@@ -26,7 +26,8 @@ class Participant implements IParticipant {
   }
 }
 
-export interface IRoomData {
+export interface IRoom {
+  id: string;
   leftSec: number;
   participantLimitNum: number;
   participants: Array<IParticipant>;
@@ -39,13 +40,15 @@ export interface IRoomData {
   getResult(): { winner: IParticipant; loser: IParticipant };
 }
 
-class RoomData implements IRoomData {
+class Room implements IRoom {
+  id: string;
   timer: ReturnType<typeof setInterval> | null = null;
   leftSec: number;
   participantLimitNum: number;
   participants: Array<IParticipant> = [];
 
-  constructor(participantLimitNum: number, leftSec: number) {
+  constructor(id: string, participantLimitNum: number, leftSec: number) {
+    this.id = id;
     this.participantLimitNum = participantLimitNum;
     this.leftSec = leftSec;
   }
@@ -99,7 +102,36 @@ class RoomData implements IRoomData {
   }
 }
 
+export interface IRoomStore {
+  rooms: Array<IRoom>;
+  addRoom(room: IRoom): void;
+  removeRoom(roomId: string): void;
+  getNotEmptyRoomId(): string | null;
+}
+
+class RoomStore implements IRoomStore {
+  rooms: Array<IRoom> = [];
+
+  addRoom(room: IRoom) {
+    this.rooms.push(room);
+  }
+
+  removeRoom(roomId: string): void {
+    const index = this.rooms.findIndex((room) => room.id === roomId);
+    if (index > -1) {
+      this.rooms.splice(index, 1);
+    }
+  }
+
+  getNotEmptyRoomId(): string | null {
+    const room = this.rooms.find((room) => !room.isParticipantFull());
+    return room === undefined ? null : room.id;
+  }
+}
+
 export const createParticipant = (name: IParticipant["basic"]["name"]): IParticipant => new Participant(name);
 
-export const createRoom = (participantLimitNum: number, leftSec: number): RoomData =>
-  new RoomData(participantLimitNum, leftSec);
+export const createRoom = (roomArg: Pick<IRoom, "id" | "leftSec" | "participantLimitNum">): IRoom =>
+  new Room(roomArg.id, roomArg.participantLimitNum, roomArg.leftSec);
+
+export const createRoomStore = (): IRoomStore => new RoomStore();

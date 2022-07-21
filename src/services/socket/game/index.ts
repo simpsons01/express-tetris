@@ -1,6 +1,6 @@
 import { logger } from "../../../util";
 import { Namespace, Server as SocketServer } from "socket.io";
-import { createRoom, IRoomData, IParticipant } from "./room";
+import { createRoom, createRoomStore, IRoomStore } from "./room";
 import { v4 as uuidv4 } from "uuid";
 import { Server as HttpServer } from "http";
 import { AnyObject } from "../../../util";
@@ -13,70 +13,56 @@ export type SocketServerOptions = AnyObject;
 
 class GameSocketService {
   io: SocketServer;
-
-  roomStore: Array<{ id: string; data: IRoomData; io: Namespace }> = [];
+  roomStore: IRoomStore;
 
   constructor(httpServer: HttpServer, options: SocketServerOptions) {
     this.io = new SocketServer(httpServer, options);
-  }
-
-  getNotEmptyRoomId(): string | null {
-    const room = this.roomStore.find((room) => !room.data.isParticipantFull());
-    return room === undefined ? null : room.id;
-  }
-
-  checkRoomEmpty(roomId: string): boolean {
-    let isEmpty = false;
-    this.roomStore.forEach((room) => {
-      if (room.id === roomId) {
-        if (room.data.isParticipantEmpty()) {
-          isEmpty = true;
-        }
-      }
-    });
-    return isEmpty;
-  }
-
-  addParticipantToRoom(participant: IParticipant, roomId: string) {
-    this.roomStore.forEach((room) => {
-      if (room.id === roomId) {
-        if (!room.data.isParticipantFull()) {
-          room.data.addParticipant(participant);
-        }
-      }
-    });
-  }
-
-  removeParticipantFromRoom(roomId: string, participantId: string, socketId: string) {
-    this.roomStore.forEach((room) => {
-      if (room.id === roomId) {
-        room.data.removeParticipant(participantId);
-        room.io.sockets.forEach((socket) => {
-          if (socket.id === socketId) {
-            socket.disconnect();
-          }
-        });
-      }
-    });
+    this.roomStore = createRoomStore();
   }
 
   createRoom(): string {
     const roomId = uuidv4();
-    const io = this.io.of(`/${roomId}`);
-    const room = createRoom(ROOM_DEFAULT_PARTICIPANT_NUM, ROOM_DEFAULT_LEFT_SEC);
-    this.roomStore.push({ id: roomId, data: room, io });
+    let io: Namespace | null = this.io.of(`/${roomId}`);
+    const room = createRoom({
+      id: roomId,
+      participantLimitNum: ROOM_DEFAULT_PARTICIPANT_NUM,
+      leftSec: ROOM_DEFAULT_LEFT_SEC,
+    });
+    this.roomStore.addRoom(room);
     io.on("connection", (socket) => {
-      if (room.isParticipantFull()) {
-        io.emit("game-start");
-        room.startCountDown(
-          (sec) => {
-            io.emit("game-countdown", sec);
-          },
-          () => {
-            io.emit("game-over");
-          }
-        );
-      }
+      socket.on("participant-join", (participant, callback) => {
+        room.addParticipant(participant);
+        callback();
+      });
+
+      socket.on("participant-leave", (participantId, callback) => {
+        room.removeParticipant(participantId);
+        callback();
+      });
+
+      socket.on("check-participant-isfull", () => {
+        if (room.isParticipantFull()) {
+          (io as Namespace).emit("game-start");
+          room.startCountDown(
+            (sec) => {
+              (io as Namespace).emit("game-countdown", sec);
+            },
+            () => {
+              (io as Namespace).emit("game-over");
+            }
+          );
+        }
+      });
+
+      socket.on("check-participant-isEmpty", () => {
+        if (room.isParticipantEmpty()) {
+          (io as Namespace).disconnectSockets();
+          (io as Namespace).removeAllListeners();
+          this.roomStore.removeRoom(room.id);
+          io = null;
+        }
+      });
+
       socket.on("game-nextPolyominoUpdated", (nextPolyominoType) => {
         socket.broadcast.emit("opponent-nextPolyominoUpdated", nextPolyominoType);
       });
@@ -95,15 +81,6 @@ class GameSocketService {
       });
     });
     return roomId;
-  }
-
-  closeRoom(roomId: string): void {
-    const index = this.roomStore.findIndex((room) => room.id === roomId);
-    if (index > -1) {
-      this.roomStore[index].io.disconnectSockets();
-      this.roomStore[index].io.removeAllListeners();
-      this.roomStore.splice(index, 1);
-    }
   }
 }
 

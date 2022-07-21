@@ -53,13 +53,11 @@ router.post("/join-game", function (req: Request, res: Response, next: NextFunct
     const participant = createParticipant(userName);
     const gameSocketInstance = gameSocket.getInstance();
     if (!isNil(gameSocketInstance)) {
-      const notEmptyRoomId = gameSocketInstance.getNotEmptyRoomId();
+      const notEmptyRoomId = gameSocketInstance.roomStore.getNotEmptyRoomId();
       if (!isNil(notEmptyRoomId)) {
-        gameSocketInstance.addParticipantToRoom(participant, notEmptyRoomId);
         res.status(200).json({ roomId: notEmptyRoomId, participant });
       } else {
         const roomId = gameSocketInstance.createRoom();
-        gameSocketInstance.addParticipantToRoom(participant, roomId);
         res.status(200).json({ roomId, participant });
       }
     } else {
@@ -69,35 +67,5 @@ router.post("/join-game", function (req: Request, res: Response, next: NextFunct
     res.status(403).end();
   }
 });
-
-router.post(
-  "/leave-game/",
-  function (
-    req: Request<AnyObject, AnyObject, { roomId: string; socketId: string; participantId: string }>,
-    res: Response,
-    next: NextFunction
-  ) {
-    if (!isNil(req.session.user) && req.session.user.inGame) {
-      const { roomId, socketId, participantId } = req.body;
-      if (isNil(roomId) || isNil(socketId) || isNil(participantId)) {
-        const gameSocketInstance = gameSocket.getInstance();
-        if (!isNil(gameSocketInstance)) {
-          gameSocketInstance.removeParticipantFromRoom(roomId, participantId, socketId);
-          if (gameSocketInstance.checkRoomEmpty(roomId)) {
-            gameSocketInstance.closeRoom(roomId);
-          }
-          req.session.user.inGame = false;
-          res.status(200).end();
-        } else {
-          res.status(403).end();
-        }
-      } else {
-        res.status(401).send();
-      }
-    } else {
-      res.status(403).end();
-    }
-  }
-);
 
 export default router;

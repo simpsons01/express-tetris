@@ -33,6 +33,7 @@ export interface IRoomData {
   addParticipant(participant: IParticipant): void;
   removeParticipant(participantId: string): void;
   isParticipantFull(): boolean;
+  isParticipantEmpty(): boolean;
   startCountDown(onCountDown?: (leftSec: number) => any, onComplete?: (...args: Array<any>) => any): void;
   updateParticipantScore(participantId: string, score: number): void;
   getResult(): { winner: IParticipant; loser: IParticipant };
@@ -49,7 +50,7 @@ class RoomData implements IRoomData {
     this.leftSec = leftSec;
   }
 
-  startCountDown(onCountDown?: (leftSec: number) => any, onComplete?: (...args: Array<any>) => any) {
+  startCountDown(onCountDown?: (leftSec: number) => void, onComplete?: (...args: Array<unknown>) => void) {
     this.timer = setInterval(() => {
       this.leftSec -= 1;
       if (is(Function, onCountDown)) onCountDown(this.leftSec);
@@ -92,9 +93,13 @@ class RoomData implements IRoomData {
   isParticipantFull(): boolean {
     return this.participants.length === this.participantLimitNum;
   }
+
+  isParticipantEmpty(): boolean {
+    return this.participants.length === 0;
+  }
 }
 
 export const createParticipant = (name: IParticipant["basic"]["name"]): IParticipant => new Participant(name);
 
-export const createRoomData = (participantLimitNum: number, leftSec: number): RoomData =>
+export const createRoom = (participantLimitNum: number, leftSec: number): RoomData =>
   new RoomData(participantLimitNum, leftSec);

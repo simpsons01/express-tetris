@@ -1,11 +1,10 @@
 import { logger } from "../../../util";
 import { Namespace, Server as SocketServer } from "socket.io";
-import { createRoomData, createParticipant, IRoomData } from "./room";
+import { createRoom, IRoomData, IParticipant } from "./room";
 import { v4 as uuidv4 } from "uuid";
 import { Server as HttpServer } from "http";
 import { AnyObject } from "../../../util";
 
-const createRandomName = (): string => uuidv4();
 const ROOM_DEFAULT_PARTICIPANT_NUM = 2;
 const ROOM_DEFAULT_LEFT_SEC = 60;
 
@@ -21,27 +20,55 @@ class GameSocketService {
     this.io = new SocketServer(httpServer, options);
   }
 
-  addRoom(id: string, data: IRoomData, io: Namespace): void {
-    this.roomStore.push({ id, data, io });
-  }
-
   getNotEmptyRoomId(): string | null {
     const room = this.roomStore.find((room) => !room.data.isParticipantFull());
     return room === undefined ? null : room.id;
   }
 
-  async createRoom(): Promise<string> {
+  checkRoomEmpty(roomId: string): boolean {
+    let isEmpty = false;
+    this.roomStore.forEach((room) => {
+      if (room.id === roomId) {
+        if (room.data.isParticipantEmpty()) {
+          isEmpty = true;
+        }
+      }
+    });
+    return isEmpty;
+  }
+
+  addParticipantToRoom(participant: IParticipant, roomId: string) {
+    this.roomStore.forEach((room) => {
+      if (room.id === roomId) {
+        if (!room.data.isParticipantFull()) {
+          room.data.addParticipant(participant);
+        }
+      }
+    });
+  }
+
+  removeParticipantFromRoom(roomId: string, participantId: string, socketId: string) {
+    this.roomStore.forEach((room) => {
+      if (room.id === roomId) {
+        room.data.removeParticipant(participantId);
+        room.io.sockets.forEach((socket) => {
+          if (socket.id === socketId) {
+            socket.disconnect();
+          }
+        });
+      }
+    });
+  }
+
+  createRoom(): string {
     const roomId = uuidv4();
-    const io = await this.io.of(`/${roomId}`);
-    const roomData = createRoomData(ROOM_DEFAULT_PARTICIPANT_NUM, ROOM_DEFAULT_LEFT_SEC);
+    const io = this.io.of(`/${roomId}`);
+    const room = createRoom(ROOM_DEFAULT_PARTICIPANT_NUM, ROOM_DEFAULT_LEFT_SEC);
+    this.roomStore.push({ id: roomId, data: room, io });
     io.on("connection", (socket) => {
-      if (roomData.isParticipantFull()) return;
-      const participant = createParticipant(createRandomName());
-      roomData.addParticipant(participant);
-      socket.emit("game-participant-joined", participant.basic);
-      if (roomData.isParticipantFull()) {
+      if (room.isParticipantFull()) {
         io.emit("game-start");
-        roomData.startCountDown(
+        room.startCountDown(
           (sec) => {
             io.emit("game-countdown", sec);
           },
@@ -63,12 +90,20 @@ class GameSocketService {
       });
 
       socket.on("game-scoreUpdated", (participantId: string, score: number) => {
-        roomData.updateParticipantScore(participantId, score);
+        room.updateParticipantScore(participantId, score);
         socket.broadcast.emit("opponent-nextScoreUpdated", score);
       });
     });
-    this.addRoom(roomId, roomData, io);
     return roomId;
+  }
+
+  closeRoom(roomId: string): void {
+    const index = this.roomStore.findIndex((room) => room.id === roomId);
+    if (index > -1) {
+      this.roomStore[index].io.disconnectSockets();
+      this.roomStore[index].io.removeAllListeners();
+      this.roomStore.splice(index, 1);
+    }
   }
 }
 

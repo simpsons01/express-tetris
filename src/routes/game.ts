@@ -6,14 +6,12 @@ const router = Router();
 
 router.get("/join", async function (req, res) {
   const gameSocketInstance = gameSocket.getInstance();
-  if (gameSocketInstance) {
-    const notEmptyRoomId = gameSocketInstance.getNotEmptyRoomId();
-    if (!isNil(notEmptyRoomId)) {
-      res.send(notEmptyRoomId);
-    } else {
-      const roomId = await gameSocketInstance.createRoom();
-      res.send(roomId);
-    }
+  const notEmptyRoomId = gameSocketInstance?.getNotEmptyRoomId();
+  if (!isNil(notEmptyRoomId)) {
+    res.send(notEmptyRoomId);
+  } else {
+    const roomId = await gameSocketInstance?.createRoom();
+    res.send(roomId);
   }
 });
 

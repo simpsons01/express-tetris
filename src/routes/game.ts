@@ -86,6 +86,7 @@ router.post(
           if (gameSocketInstance.checkRoomEmpty(roomId)) {
             gameSocketInstance.closeRoom(roomId);
           }
+          req.session.user.inGame = false;
           res.status(200).end();
         } else {
           res.status(403).end();

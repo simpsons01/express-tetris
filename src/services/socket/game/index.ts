@@ -1,15 +1,9 @@
 import { logger } from "../../../util";
-import { Namespace, Server as SocketServer } from "socket.io";
-import { createRoom, createRoomStore, IRoomStore, createParticipant } from "./room";
-import { v4 as uuidv4 } from "uuid";
+import { Server as SocketServer, Socket } from "socket.io";
+import { createRoomStore, IRoomStore, createParticipant } from "./room";
 import { Server as HttpServer } from "http";
-import { AnyObject } from "../../../util";
-import sessionMiddleware from "../../../util/session";
-import { Request, Response, NextFunction } from "express";
+import { AnyObject, AnyFunction, SessionUser } from "../../../util/types";
 import { isNil } from "ramda";
-
-const ROOM_DEFAULT_PARTICIPANT_NUM = 2;
-const ROOM_DEFAULT_LEFT_SEC = 60;
 
 // TODO: 創建socket的options不行是AnyObject
 export type SocketServerOptions = AnyObject;
@@ -23,88 +17,122 @@ class GameSocketService {
     this.roomStore = createRoomStore();
   }
 
-  createRoom(): string {
-    const roomId = uuidv4();
-    let io: Namespace | null = this.io.of(`/${roomId}`);
-    const room = createRoom({
-      id: roomId,
-      participantLimitNum: ROOM_DEFAULT_PARTICIPANT_NUM,
-      leftSec: ROOM_DEFAULT_LEFT_SEC,
-    });
-    this.roomStore.addRoom(room);
-    io.use((socket, next) =>
-      sessionMiddleware(socket.request as Request, {} as Response, next as NextFunction)
-    );
-    io.on("connection", (socket) => {
+  listen(): void {
+    const withUserCheck = (
+      socket: Socket,
+      callback: AnyFunction<unknown>,
+      ...args: Array<unknown>
+    ) => {
       const user = socket.request.session.user;
-      logger.log(user);
       if (isNil(user)) {
         socket.disconnect();
         return;
       }
-      if (!user.socketId) {
-        user.socketId = socket.id;
-        user.roomId = room.id;
-        socket.request.session.save(() => {
-          socket.data.roomId = room.id;
-          const participant = createParticipant(user.name, socket.id);
-          room.addParticipant(participant);
-          if (room.isParticipantFull()) {
-            (io as Namespace).emit("game-start");
-            room.startCountDown(
-              (sec) => {
-                (io as Namespace).emit("game-countdown", sec);
-              },
-              () => {
-                (io as Namespace).emit("game-over");
+      return callback(args);
+    };
+
+    this.io.use((socket, next) => {
+      if (isNil(socket.request.session.user)) {
+        next(new Error("not auth"));
+      } else if (socket.request.session.user.socketId) {
+        next(new Error("already connected"));
+      } else {
+        next();
+      }
+    });
+    this.io.on("connection", (socket) => {
+      (socket.request.session.user as SessionUser).socketId = socket.id;
+      socket.request.session.save(() => {
+        socket.emit("socketId-save");
+      });
+
+      socket.on("join-game", () => {
+        withUserCheck(socket, () => {
+          const notEmptyRoom = this.roomStore.getNotEmptyRoom();
+          if (!isNil(notEmptyRoom)) {
+            const user = socket.request.session.user as SessionUser;
+            user.roomId = notEmptyRoom.id;
+            socket.request.session.save(() => {
+              socket.data.roomId = notEmptyRoom.id;
+              const participant = createParticipant(user.name, socket.id);
+              notEmptyRoom.addParticipant(participant);
+              if (notEmptyRoom.isParticipantFull()) {
+                this.io.in(socket.data.roomId).emit("game-start");
+                notEmptyRoom.startCountDown(
+                  (sec) => {
+                    this.io.in(socket.data.roomId).emit("game-countdown", sec);
+                  },
+                  () => {
+                    this.io.in(socket.data.roomId).emit("game-over");
+                  }
+                );
               }
-            );
+            });
           }
         });
-      } else {
-        logger.log("user is connected");
-      }
+      });
+
+      socket.on("leave-game", () => {
+        const leaveRoom = () => {
+          if (!isNil(socket.data.roomId)) {
+            const roomId = socket.data.roomId;
+            delete socket.data.roomId;
+            const room = this.roomStore.findRoom(roomId);
+            if (!isNil(room)) {
+              room.removeParticipant(socket.id);
+            }
+          }
+        };
+        if (!isNil(socket.request.session.user)) {
+          socket.request.session.user.roomId = "";
+          socket.request.session.save(leaveRoom);
+        } else {
+          leaveRoom();
+        }
+      });
+
       socket.on("disconnect", () => {
         logger.log("user is disconnect");
         const handleDisconnect = () => {
-          room.removeParticipant(socket.id);
-          if (room.isParticipantEmpty()) {
-            (io as Namespace).disconnectSockets();
-            this.roomStore.removeRoom(socket.data.roomId);
-            io = null;
+          if (!isNil(socket.data.roomId)) {
+            const roomId = socket.data.roomId;
+            delete socket.data.roomId;
+            const room = this.roomStore.findRoom(roomId);
+            if (!isNil(room)) {
+              room.removeParticipant(socket.id);
+              if (room.isParticipantEmpty()) {
+                this.io.in(room.id).disconnectSockets();
+                this.roomStore.removeRoom(roomId);
+              }
+            }
           }
         };
-        const user = socket.request.session.user;
-        if (!isNil(user)) {
-          user.socketId = "";
-          user.roomId = "";
-          socket.request.session.save(() => {
-            handleDisconnect();
-          });
+        if (!isNil(socket.request.session.user)) {
+          socket.request.session.user.socketId = "";
+          socket.request.session.user.roomId = "";
+          socket.request.session.save(handleDisconnect);
         } else {
           handleDisconnect();
         }
       });
 
-      socket.on("game-nextPolyominoUpdated", (nextPolyominoType) => {
-        socket.broadcast.emit("opponent-nextPolyominoUpdated", nextPolyominoType);
-      });
+      // socket.on("game-nextPolyominoUpdated", (nextPolyominoType) => {
+      //   socket.to(room.id).emit("opponent-nextPolyominoUpdated", nextPolyominoType);
+      // });
 
-      socket.on("game-PolyominoUpdated", (polyomino) => {
-        socket.broadcast.emit("opponent-nextPolyominoUpdated", polyomino);
-      });
+      // socket.on("game-PolyominoUpdated", (polyomino) => {
+      //   socket.to(room.id).emit("opponent-nextPolyominoUpdated", polyomino);
+      // });
 
-      socket.on("game-tetrisUpdated", (tetris) => {
-        socket.broadcast.emit("opponent-nextPolyominoUpdated", tetris);
-      });
+      // socket.on("game-tetrisUpdated", (tetris) => {
+      //   socket.to(room.id).emit("opponent-nextPolyominoUpdated", tetris);
+      // });
 
-      socket.on("game-scoreUpdated", (participantId: string, score: number) => {
-        room.updateParticipantScore(participantId, score);
-        socket.broadcast.emit("opponent-nextScoreUpdated", score);
-      });
+      // socket.on("game-scoreUpdated", (participantId: string, score: number) => {
+      //   room.updateParticipantScore(participantId, score);
+      //   socket.to(room.id).emit("opponent-nextScoreUpdated", score);
+      // });
     });
-
-    return roomId;
   }
 }
 

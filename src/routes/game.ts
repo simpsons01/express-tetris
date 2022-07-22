@@ -1,7 +1,6 @@
-import { AnyObject } from "./../util/index";
+import { AnyObject } from "./../util/types";
 import { Router, Request, Response, NextFunction } from "express";
 import { isNil } from "ramda";
-import gameSocket from "../services/socket/game/index";
 import { v4 as uuidv4 } from "uuid";
 
 const createRandomName = () => uuidv4();
@@ -41,25 +40,6 @@ router.post("/offline", function (req: Request, res: Response, next: NextFunctio
     });
   } else {
     res.status(200).end();
-  }
-});
-
-router.post("/join-game", function (req: Request, res: Response, next: NextFunction) {
-  if (!isNil(req.session.user) && !req.session.user.socketId) {
-    const gameSocketInstance = gameSocket.getInstance();
-    if (!isNil(gameSocketInstance)) {
-      const notEmptyRoomId = gameSocketInstance.roomStore.getNotEmptyRoomId();
-      if (!isNil(notEmptyRoomId)) {
-        res.status(200).json({ roomId: notEmptyRoomId });
-      } else {
-        const roomId = gameSocketInstance.createRoom();
-        res.status(200).json({ roomId });
-      }
-    } else {
-      res.status(403).end();
-    }
-  } else {
-    res.status(403).end();
   }
 });
 

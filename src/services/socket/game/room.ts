@@ -1,5 +1,5 @@
-import { clone, is } from "ramda";
-
+import { clone, is, isNil } from "ramda";
+import { v4 as uuidv4 } from "uuid";
 export interface IParticipant {
   id: string;
   basic: {
@@ -114,7 +114,9 @@ export interface IRoomStore {
   rooms: Array<IRoom>;
   addRoom(room: IRoom): void;
   removeRoom(roomId: string): void;
-  getNotEmptyRoomId(): string | null;
+  getNotEmptyRoom(): IRoom | undefined;
+  createRoom(id?: string): IRoom;
+  findRoom(roomId: string): IRoom | undefined;
 }
 
 class RoomStore implements IRoomStore {
@@ -131,9 +133,21 @@ class RoomStore implements IRoomStore {
     }
   }
 
-  getNotEmptyRoomId(): string | null {
-    const room = this.rooms.find((room) => !room.isParticipantFull());
-    return room === undefined ? null : room.id;
+  getNotEmptyRoom(): IRoom | undefined {
+    return this.rooms.find((room) => !room.isParticipantFull());
+  }
+
+  createRoom(id?: string): IRoom {
+    const ROOM_DEFAULT_PARTICIPANT_NUM = 2;
+    const ROOM_DEFAULT_LEFT_SEC = 60;
+    const roomId = isNil(id) ? uuidv4() : id;
+    const room = new Room(roomId, ROOM_DEFAULT_PARTICIPANT_NUM, ROOM_DEFAULT_LEFT_SEC);
+    this.addRoom(room);
+    return room;
+  }
+
+  findRoom(roomId: string): IRoom | undefined {
+    return this.rooms.find((room) => room.id === roomId);
   }
 }
 

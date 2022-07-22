@@ -11,13 +11,3 @@ export const logger = {
 };
 
 export const isDev = (): boolean => process.env.NODE_ENV === "development";
-
-export interface AnyObject<T = any> {
-  [key: string]: T;
-}
-
-export interface SessionUser {
-  name: string;
-  socketId: string;
-  roomId: string;
-}

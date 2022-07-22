@@ -1,4 +1,4 @@
-import { SessionUser } from "../util";
+import { SessionUser } from "../util/types";
 import { Session, SessionData } from "express-session";
 
 declare module "express-session" {

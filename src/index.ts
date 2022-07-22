@@ -1,15 +1,22 @@
-import env from "./env";
 import http from "http";
 import cors from "cors";
-import express from "express";
+import express, { Request, Response, NextFunction } from "express";
 import bodyParser from "body-parser";
 import rootRouter from "./routes/root";
 import gameRouter from "./routes/game";
 import gameSocket from "./services/socket/game/index";
-import sessionMiddleware from "./util/session";
+import session from "express-session";
+import env from "./env";
+import { isDev } from "./util/index";
 
 const app = express();
 const httpServer = http.createServer(app);
+const sessionMiddleware = session({
+  secret: env.SESSION_SECRET as string,
+  cookie: {
+    secure: !isDev(),
+  },
+});
 
 // initialize
 app.use(
@@ -21,11 +28,14 @@ app.use(
 app.use(sessionMiddleware);
 app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({ extended: false }));
-gameSocket.initialize(httpServer, {
+const gameSocketInstance = gameSocket.initialize(httpServer, {
   cors: {
     origin: env.ALLOW_ORIGIN,
     credentials: true,
   },
+});
+gameSocketInstance.io.use((socket, next) => {
+  sessionMiddleware(socket.request as Request, {} as Response, next as NextFunction);
 });
 
 // router
@@ -38,3 +48,4 @@ const port = env.PORT || 3030;
 httpServer.listen(port, () => {
   console.log(`Server is running at https://localhost:${port}`);
 });
+gameSocketInstance.listen();

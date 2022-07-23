@@ -26,7 +26,15 @@ class Participant implements IParticipant {
   }
 }
 
+enum ROOM_STATE {
+  CREATED,
+  GAME_START,
+  GAME_INTERRUPT,
+  GAME_END,
+}
+
 export interface IRoom {
+  state: ROOM_STATE;
   id: string;
   leftSec: number;
   participantLimitNum: number;
@@ -44,7 +52,9 @@ export interface IRoom {
 }
 
 type intervalTimer = ReturnType<typeof setInterval>;
+
 class Room implements IRoom {
+  state: ROOM_STATE = ROOM_STATE.CREATED;
   id: string;
   timer: intervalTimer | null = null;
   leftSec: number;

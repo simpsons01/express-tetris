@@ -1,12 +1,21 @@
 import { logger } from "../../../util";
 import { Server as SocketServer, Socket } from "socket.io";
-import { createRoomStore, IRoomStore, createParticipant } from "./room";
+import { createRoomStore, IRoomStore, createParticipant } from "./_room";
 import { Server as HttpServer } from "http";
 import { AnyObject, AnyFunction, SessionUser } from "../../../util/types";
 import { isNil } from "ramda";
 
 // TODO: 創建socket的options不行是AnyObject
 export type SocketServerOptions = AnyObject;
+
+const withUserCheck = (socket: Socket, callback: AnyFunction<unknown>, ...args: Array<unknown>) => {
+  const user = socket.request.session.user;
+  if (isNil(user)) {
+    socket.disconnect();
+    return;
+  }
+  return callback(args);
+};
 
 class GameSocketService {
   io: SocketServer;
@@ -18,19 +27,6 @@ class GameSocketService {
   }
 
   listen(): void {
-    const withUserCheck = (
-      socket: Socket,
-      callback: AnyFunction<unknown>,
-      ...args: Array<unknown>
-    ) => {
-      const user = socket.request.session.user;
-      if (isNil(user)) {
-        socket.disconnect();
-        return;
-      }
-      return callback(args);
-    };
-
     this.io.use((socket, next) => {
       if (isNil(socket.request.session.user)) {
         next(new Error("not auth"));
@@ -42,8 +38,8 @@ class GameSocketService {
     });
     this.io.on("connection", (socket) => {
       (socket.request.session.user as SessionUser).socketId = socket.id;
-      socket.request.session.save(() => {
-        socket.emit("socketId-save");
+      socket.request.session.save((error) => {
+        if (error) return socket.emit("error", error);
       });
 
       socket.on("join-game", () => {

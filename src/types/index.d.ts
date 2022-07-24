@@ -7,8 +7,14 @@ declare module "express-session" {
   }
 }
 
+declare module "express" {
+  interface Request {
+    session: Session & Partial<SessionData>;
+  }
+}
+
 declare module "http" {
   interface IncomingMessage {
-    session: Session & SessionData;
+    session: Session & Partial<SessionData>;
   }
 }

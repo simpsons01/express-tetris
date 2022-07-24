@@ -1,21 +1,12 @@
 import { delay, logger } from "../../../util";
-import { RemoteSocket, Server as SocketServer, Socket } from "socket.io";
+import { RemoteSocket, Server as SocketServer } from "socket.io";
 import { createRoomStore, IRoomStore, createParticipant, ROOM_STATE } from "./_room";
 import { Server as HttpServer } from "http";
-import { AnyObject, AnyFunction, SessionUser } from "../../../util/types";
+import { AnyObject, SessionUser } from "../../../util/types";
 import { isEmpty, isNil } from "ramda";
 
 // TODO: 創建socket的options不行是AnyObject
 export type SocketServerOptions = AnyObject;
-
-const withUserCheck = (socket: Socket, callback: AnyFunction<unknown>, ...args: Array<unknown>) => {
-  const user = socket.request.session.user;
-  if (isNil(user)) {
-    socket.disconnect();
-    return;
-  }
-  return callback(args);
-};
 
 const dummyHandleError = (error: Error) => {
   throw error;
@@ -32,12 +23,19 @@ class GameSocketService {
   }
 
   listen(): void {
-    this.io.use((socket, next) => {
+    this.io.use(async (socket, next) => {
       if (isNil(socket.request.session.user)) {
         next(new Error("not auth"));
-      } else {
-        next();
+        return;
       }
+      const allConnectSocket = await this.io.fetchSockets();
+      for (const _socket of allConnectSocket) {
+        if (socket.request.session.id === _socket.data.user.sessionId) {
+          next(new Error("already connected"));
+          return;
+        }
+      }
+      next();
     });
     this.io.on("connection", (socket) => {
       const timer = setInterval(() => {
@@ -49,20 +47,20 @@ class GameSocketService {
         });
       }, 3000);
       socket.data.user = {
+        sessionId: socket.request.session.id,
         name: (socket.request.session.user as SessionUser).name,
         roomId: "",
       };
-
       socket.on("try_join_game", async (done) => {
-        logger.log(done);
+        console.log("participant is trying to join game! and participant id is  ", socket.id);
         try {
           let notInGameSocket: RemoteSocket<AnyObject, AnyObject> | undefined;
           const allConnectSocket = await this.io.fetchSockets();
-          for (const socket of allConnectSocket) {
-            if (isEmpty(socket.data.user.roomId)) {
-              notInGameSocket = socket;
+          for (const _socket of allConnectSocket) {
+            if (isEmpty(_socket.data.user.roomId) && _socket.id !== socket.id) {
+              notInGameSocket = _socket;
             }
-            break;
+            if (!isNil(notInGameSocket)) break;
           }
           if (isNil(notInGameSocket)) {
             done(false);
@@ -93,23 +91,26 @@ class GameSocketService {
       });
 
       socket.on("ready", async (done) => {
+        console.log("participant is ready to play! and participant id is  ", socket.id);
         const room = this.roomStore.findRoom(socket.data.user.roomId);
         if (!isNil(room)) {
           room.updateParticipantReady(socket.id);
-          done(true);
-          if (room.isParticipantReady()) {
-            await delay(2);
+          if (room.isRoomReady()) {
+            done(true);
+            await delay(1);
             if (room.state !== ROOM_STATE.GAME_START) {
               room.startBeforeGameStartCountDown(
                 (leftSec: number) => {
                   this.io.to(socket.data.user.roomId).emit("before_start_game", leftSec);
                 },
                 () => {
+                  room.setState(ROOM_STATE.GAME_START);
                   room.startCountDown(
                     (leftSec: number) => {
                       this.io.to(socket.data.user.roomId).emit("game_leftSec", leftSec);
                     },
                     () => {
+                      room.setState(ROOM_STATE.GAME_END);
                       const result = room.getResult();
                       this.io.to(socket.data.user.roomId).emit("game_over", result);
                     }
@@ -117,6 +118,8 @@ class GameSocketService {
                 }
               );
             }
+          } else {
+            done(false);
           }
         } else {
           socket.data.user.roomId = "";
@@ -125,18 +128,21 @@ class GameSocketService {
       });
 
       socket.on("leave_game", () => {
+        console.log("participant leave game! and participant id is  ", socket.id);
         if (!isEmpty(socket.data.user.roomId)) {
           const roomId = socket.data.user.roomId;
-          socket.data.user.roomId = "";
           socket.leave(roomId);
+          socket.data.user.roomId = "";
           const room = this.roomStore.findRoom(roomId);
           if (!isNil(room)) {
             room.stopCountDown();
             room.removeParticipant(socket.id);
-            if (room.isParticipantEmpty()) {
+            if (room.isRoomEmpty()) {
               this.roomStore.removeRoom(room.id);
             } else {
               if (room.state === ROOM_STATE.GAME_START) {
+                room.stopCountDown();
+                room.setState(ROOM_STATE.GAME_INTERRUPT);
                 this.io.to(roomId).emit("game_interrupted");
               }
             }
@@ -145,12 +151,21 @@ class GameSocketService {
       });
 
       socket.on("disconnect", () => {
+        console.log("participant disconnect! and participant id is  ", socket.id);
         if (!isEmpty(socket.data.user.roomId)) {
           const room = this.roomStore.findRoom(socket.data.user.roomId);
           if (!isNil(room)) {
+            console.log("room state is " + " " + room.state);
             room.stopCountDown();
-            if (room.state === ROOM_STATE.GAME_START) {
-              this.io.to(socket.data.user.roomId).emit("game_interrupted");
+            room.removeParticipant(socket.id);
+            if (room.isRoomEmpty()) {
+              this.roomStore.removeRoom(socket.data.user.roomId);
+            } else {
+              if (room.state === ROOM_STATE.GAME_START) {
+                room.stopCountDown();
+                room.setState(ROOM_STATE.GAME_INTERRUPT);
+                this.io.to(socket.data.user.roomId).emit("game_interrupted");
+              }
             }
           }
         }

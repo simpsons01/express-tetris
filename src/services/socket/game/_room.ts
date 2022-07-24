@@ -44,9 +44,9 @@ export interface IRoom {
   participants: Array<IParticipant>;
   addParticipant(participant: IParticipant): void;
   removeParticipant(participantId: string): void;
-  isParticipantFull(): boolean;
-  isParticipantEmpty(): boolean;
-  isParticipantReady(): boolean;
+  isRoomFull(): boolean;
+  isRoomEmpty(): boolean;
+  isRoomReady(): boolean;
   updateParticipantScore(participantId: string, score: number): void;
   updateParticipantReady(participantId: string): void;
   getResult(): { isTie: boolean; winner: IParticipant; loser: IParticipant };
@@ -59,6 +59,7 @@ export interface IRoom {
     onComplete?: (...args: Array<unknown>) => void
   ): void;
   stopCountDown(): void;
+  setState(state: ROOM_STATE): void;
 }
 
 type intervalTimer = ReturnType<typeof setInterval>;
@@ -87,7 +88,6 @@ class Room implements IRoom {
       leftSec -= 1;
       if (is(Function, onCountDown)) onCountDown(leftSec);
       if (leftSec === 0) {
-        this.state = ROOM_STATE.GAME_END;
         if (is(Function, onComplete)) onComplete();
         clearInterval(this._beforeStartTimer as intervalTimer);
         this._beforeStartTimer = null;
@@ -99,7 +99,6 @@ class Room implements IRoom {
     onCountDown?: (leftSec: number) => void,
     onComplete?: (...args: Array<unknown>) => void
   ) {
-    this.state = ROOM_STATE.GAME_START;
     this._timer = setInterval(() => {
       this.leftSec -= 1;
       if (is(Function, onCountDown)) onCountDown(this.leftSec);
@@ -112,7 +111,6 @@ class Room implements IRoom {
   }
 
   stopCountDown() {
-    this.state = ROOM_STATE.GAME_INTERRUPT;
     if (!isNil(this._timer)) {
       clearInterval(this._timer as intervalTimer);
       this._timer = null;
@@ -120,7 +118,7 @@ class Room implements IRoom {
   }
 
   addParticipant(participant: IParticipant): void {
-    if (!this.isParticipantFull()) {
+    if (!this.isRoomFull()) {
       this.participants.push(participant);
     }
   }
@@ -160,22 +158,26 @@ class Room implements IRoom {
       }
     }
     return {
-      isTie: winner.id === loser.id,
+      isTie: winner.score === loser.score,
       winner,
       loser,
     };
   }
 
-  isParticipantFull(): boolean {
+  isRoomFull(): boolean {
     return this.participants.length === this.participantLimitNum;
   }
 
-  isParticipantEmpty(): boolean {
+  isRoomEmpty(): boolean {
     return this.participants.length === 0;
   }
 
-  isParticipantReady(): boolean {
+  isRoomReady(): boolean {
     return this.participants.every((participant) => participant.isReady);
+  }
+
+  setState(state: ROOM_STATE): void {
+    this.state = state;
   }
 }
 
@@ -203,12 +205,12 @@ class RoomStore implements IRoomStore {
   }
 
   getNotEmptyRoom(): IRoom | undefined {
-    return this.rooms.find((room) => !room.isParticipantFull());
+    return this.rooms.find((room) => !room.isRoomFull());
   }
 
   createRoom(id?: string): IRoom {
     const ROOM_DEFAULT_PARTICIPANT_NUM = 2;
-    const ROOM_DEFAULT_LEFT_SEC = 60;
+    const ROOM_DEFAULT_LEFT_SEC = 10;
     const roomId = isNil(id) ? uuidv4() : id;
     const room = new Room(roomId, ROOM_DEFAULT_PARTICIPANT_NUM, ROOM_DEFAULT_LEFT_SEC);
     this.addRoom(room);

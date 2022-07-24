@@ -5,7 +5,7 @@
   "main": "index.js",
   "scripts": {
     "start": "cross-env NODE_ENV=production node dist/index.js",
-    "dev": "cross-env NODE_ENV=development concurrently \"npx tsc --watch\" \"nodemon -q dist/index.js\"",
+    "dev": "cross-env NODE_ENV=development concurrently \"npx tsc --watch\" \"nodemon --exec 'node --inspect=0.0.0.0 dist/index.js'\"",
     "build": "npx tsc"
   },
   "author": "",

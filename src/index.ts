@@ -39,6 +39,9 @@ gameSocketInstance.io.use((socket, next) => {
 });
 gameSocketInstance.listen();
 
+// @ts-ignore
+global.gameSocketInstance = gameSocketInstance;
+
 // router
 app.use("/health-check", (req, res) => res.status(200));
 app.use("/", rootRouter);

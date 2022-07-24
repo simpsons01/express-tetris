@@ -37,6 +37,7 @@ const gameSocketInstance = gameSocket.initialize(httpServer, {
 gameSocketInstance.io.use((socket, next) => {
   sessionMiddleware(socket.request as Request, {} as Response, next as NextFunction);
 });
+gameSocketInstance.listen();
 
 // router
 app.use("/health-check", (req, res) => res.status(200));
@@ -48,4 +49,3 @@ const port = env.PORT || 3030;
 httpServer.listen(port, () => {
   console.log(`Server is running at https://localhost:${port}`);
 });
-gameSocketInstance.listen();

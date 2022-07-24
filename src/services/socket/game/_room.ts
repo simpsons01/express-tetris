@@ -29,7 +29,7 @@ class Participant implements IParticipant {
   }
 }
 
-enum ROOM_STATE {
+export enum ROOM_STATE {
   CREATED,
   GAME_START,
   GAME_INTERRUPT,
@@ -87,6 +87,7 @@ class Room implements IRoom {
       leftSec -= 1;
       if (is(Function, onCountDown)) onCountDown(leftSec);
       if (leftSec === 0) {
+        this.state = ROOM_STATE.GAME_END;
         if (is(Function, onComplete)) onComplete();
         clearInterval(this._beforeStartTimer as intervalTimer);
         this._beforeStartTimer = null;
@@ -98,6 +99,7 @@ class Room implements IRoom {
     onCountDown?: (leftSec: number) => void,
     onComplete?: (...args: Array<unknown>) => void
   ) {
+    this.state = ROOM_STATE.GAME_START;
     this._timer = setInterval(() => {
       this.leftSec -= 1;
       if (is(Function, onCountDown)) onCountDown(this.leftSec);
@@ -110,6 +112,7 @@ class Room implements IRoom {
   }
 
   stopCountDown() {
+    this.state = ROOM_STATE.GAME_INTERRUPT;
     if (!isNil(this._timer)) {
       clearInterval(this._timer as intervalTimer);
       this._timer = null;

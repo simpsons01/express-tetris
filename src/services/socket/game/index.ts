@@ -1,6 +1,6 @@
 import { delay, logger } from "../../../util";
 import { RemoteSocket, Server as SocketServer, Socket } from "socket.io";
-import { createRoomStore, IRoomStore, createParticipant } from "./_room";
+import { createRoomStore, IRoomStore, createParticipant, ROOM_STATE } from "./_room";
 import { Server as HttpServer } from "http";
 import { AnyObject, AnyFunction, SessionUser } from "../../../util/types";
 import { isEmpty, isNil } from "ramda";
@@ -54,6 +54,7 @@ class GameSocketService {
       };
 
       socket.on("try_join_game", async (done) => {
+        logger.log(done);
         try {
           let notInGameSocket: RemoteSocket<AnyObject, AnyObject> | undefined;
           const allConnectSocket = await this.io.fetchSockets();
@@ -98,23 +99,24 @@ class GameSocketService {
           done(true);
           if (room.isParticipantReady()) {
             await delay(2);
-            room.startBeforeGameStartCountDown(
-              (leftSec: number) => {
-                this.io.to(socket.data.user.roomId).emit("before_start_game", leftSec);
-              },
-              () => {
-                room.startCountDown(
-                  (leftSec: number) => {
-                    this.io.to(socket.data.user.roomId).emit("game_leftSec", leftSec);
-                  },
-                  () => {
-                    const result = room.getResult();
-                    this.io.to(socket.data.user.roomId).emit("game_over", result);
-                  }
-                );
-              }
-            );
-            room.startCountDown();
+            if (room.state !== ROOM_STATE.GAME_START) {
+              room.startBeforeGameStartCountDown(
+                (leftSec: number) => {
+                  this.io.to(socket.data.user.roomId).emit("before_start_game", leftSec);
+                },
+                () => {
+                  room.startCountDown(
+                    (leftSec: number) => {
+                      this.io.to(socket.data.user.roomId).emit("game_leftSec", leftSec);
+                    },
+                    () => {
+                      const result = room.getResult();
+                      this.io.to(socket.data.user.roomId).emit("game_over", result);
+                    }
+                  );
+                }
+              );
+            }
           }
         } else {
           socket.data.user.roomId = "";
@@ -134,7 +136,7 @@ class GameSocketService {
             if (room.isParticipantEmpty()) {
               this.roomStore.removeRoom(room.id);
             } else {
-              if (room.leftSec !== 0) {
+              if (room.state === ROOM_STATE.GAME_START) {
                 this.io.to(roomId).emit("game_interrupted");
               }
             }
@@ -147,7 +149,7 @@ class GameSocketService {
           const room = this.roomStore.findRoom(socket.data.user.roomId);
           if (!isNil(room)) {
             room.stopCountDown();
-            if (room.leftSec !== 0) {
+            if (room.state === ROOM_STATE.GAME_START) {
               this.io.to(socket.data.user.roomId).emit("game_interrupted");
             }
           }

@@ -2,27 +2,30 @@ import { clone, is, isNil } from "ramda";
 import { v4 as uuidv4 } from "uuid";
 export interface IParticipant {
   id: string;
-  basic: {
-    name: string;
-  };
-  game: {
-    score: number;
-  };
+  name: string;
+  score: number;
+  isReady: boolean;
   updateScore(score: number): void;
+  ready(): void;
 }
 
 class Participant implements IParticipant {
   id: string;
-  basic = { name: "" };
-  game = { score: 0 };
+  name: string;
+  score = 0;
+  isReady = false;
 
   constructor(name: string, id: string) {
-    this.basic.name = name;
+    this.name = name;
     this.id = id;
   }
 
   updateScore(score: number): void {
-    this.game.score += score;
+    this.score += score;
+  }
+
+  ready() {
+    this.isReady = true;
   }
 }
 
@@ -43,12 +46,19 @@ export interface IRoom {
   removeParticipant(participantId: string): void;
   isParticipantFull(): boolean;
   isParticipantEmpty(): boolean;
+  isParticipantReady(): boolean;
+  updateParticipantScore(participantId: string, score: number): void;
+  updateParticipantReady(participantId: string): void;
+  getResult(): { isTie: boolean; winner: IParticipant; loser: IParticipant };
+  startBeforeGameStartCountDown(
+    onCountDown?: (leftSec: number) => void,
+    onComplete?: (...args: Array<unknown>) => void
+  ): void;
   startCountDown(
     onCountDown?: (leftSec: number) => void,
     onComplete?: (...args: Array<unknown>) => void
   ): void;
-  updateParticipantScore(participantId: string, score: number): void;
-  getResult(): { winner: IParticipant; loser: IParticipant };
+  stopCountDown(): void;
 }
 
 type intervalTimer = ReturnType<typeof setInterval>;
@@ -56,10 +66,11 @@ type intervalTimer = ReturnType<typeof setInterval>;
 class Room implements IRoom {
   state: ROOM_STATE = ROOM_STATE.CREATED;
   id: string;
-  timer: intervalTimer | null = null;
   leftSec: number;
   participantLimitNum: number;
   participants: Array<IParticipant> = [];
+  _beforeStartTimer: intervalTimer | null = null;
+  _timer: intervalTimer | null = null;
 
   constructor(id: string, participantLimitNum: number, leftSec: number) {
     this.id = id;
@@ -67,19 +78,42 @@ class Room implements IRoom {
     this.leftSec = leftSec;
   }
 
+  startBeforeGameStartCountDown(
+    onCountDown?: (leftSec: number) => void,
+    onComplete?: (...args: Array<unknown>) => void
+  ) {
+    let leftSec = 3;
+    this._beforeStartTimer = setInterval(() => {
+      leftSec -= 1;
+      if (is(Function, onCountDown)) onCountDown(leftSec);
+      if (leftSec === 0) {
+        if (is(Function, onComplete)) onComplete();
+        clearInterval(this._beforeStartTimer as intervalTimer);
+        this._beforeStartTimer = null;
+      }
+    }, 1000);
+  }
+
   startCountDown(
     onCountDown?: (leftSec: number) => void,
     onComplete?: (...args: Array<unknown>) => void
   ) {
-    this.timer = setInterval(() => {
+    this._timer = setInterval(() => {
       this.leftSec -= 1;
       if (is(Function, onCountDown)) onCountDown(this.leftSec);
       if (this.leftSec === 0) {
         if (is(Function, onComplete)) onComplete();
-        clearInterval(this.timer as intervalTimer);
-        this.timer = null;
+        clearInterval(this._timer as intervalTimer);
+        this._timer = null;
       }
     }, 1000);
+  }
+
+  stopCountDown() {
+    if (!isNil(this._timer)) {
+      clearInterval(this._timer as intervalTimer);
+      this._timer = null;
+    }
   }
 
   addParticipant(participant: IParticipant): void {
@@ -103,11 +137,29 @@ class Room implements IRoom {
     });
   }
 
-  getResult(): { winner: IParticipant; loser: IParticipant } {
-    const _ = clone(this.participants).sort((a, b) => a.game.score - b.game.score);
+  updateParticipantReady(participantId: string) {
+    this.participants.forEach((participant) => {
+      if (participant.id === participantId) {
+        participant.ready();
+      }
+    });
+  }
+
+  getResult(): { isTie: boolean; winner: IParticipant; loser: IParticipant } {
+    let winner: IParticipant = this.participants[0],
+      loser: IParticipant = this.participants[0];
+    for (const participant of this.participants) {
+      if (participant.score > winner.score) {
+        winner = participant;
+      }
+      if (participant.score < loser.score) {
+        loser = participant;
+      }
+    }
     return {
-      winner: _[_.length - 1],
-      loser: _[0],
+      isTie: winner.id === loser.id,
+      winner,
+      loser,
     };
   }
 
@@ -117,6 +169,10 @@ class Room implements IRoom {
 
   isParticipantEmpty(): boolean {
     return this.participants.length === 0;
+  }
+
+  isParticipantReady(): boolean {
+    return this.participants.every((participant) => participant.isReady);
   }
 }
 

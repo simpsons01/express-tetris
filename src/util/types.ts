@@ -6,6 +6,4 @@ export type AnyFunction<T = any, K = any | undefined | void | unknown> = (...arg
 
 export interface SessionUser {
   name: string;
-  socketId: string;
-  roomId: string;
 }

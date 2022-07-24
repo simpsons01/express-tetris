@@ -1,9 +1,9 @@
-import { logger } from "../../../util";
-import { Server as SocketServer, Socket } from "socket.io";
+import { delay, logger } from "../../../util";
+import { RemoteSocket, Server as SocketServer, Socket } from "socket.io";
 import { createRoomStore, IRoomStore, createParticipant } from "./_room";
 import { Server as HttpServer } from "http";
 import { AnyObject, AnyFunction, SessionUser } from "../../../util/types";
-import { isNil } from "ramda";
+import { isEmpty, isNil } from "ramda";
 
 // TODO: 創建socket的options不行是AnyObject
 export type SocketServerOptions = AnyObject;
@@ -17,9 +17,14 @@ const withUserCheck = (socket: Socket, callback: AnyFunction<unknown>, ...args: 
   return callback(args);
 };
 
+const dummyHandleError = (error: Error) => {
+  throw error;
+};
+
 class GameSocketService {
   io: SocketServer;
   roomStore: IRoomStore;
+  waitList: Array<string> = [];
 
   constructor(httpServer: HttpServer, options: SocketServerOptions) {
     this.io = new SocketServer(httpServer, options);
@@ -30,104 +35,125 @@ class GameSocketService {
     this.io.use((socket, next) => {
       if (isNil(socket.request.session.user)) {
         next(new Error("not auth"));
-      } else if (socket.request.session.user.socketId) {
-        next(new Error("already connected"));
       } else {
         next();
       }
     });
     this.io.on("connection", (socket) => {
-      (socket.request.session.user as SessionUser).socketId = socket.id;
-      socket.request.session.save((error) => {
-        if (error) return socket.emit("error", error);
+      const timer = setInterval(() => {
+        socket.request.session.reload((err) => {
+          if (err) return dummyHandleError(new Error("oops"));
+          if (isNil(socket.request.session.user)) {
+            return socket.disconnect();
+          }
+        });
+      }, 3000);
+      socket.data.user = {
+        name: (socket.request.session.user as SessionUser).name,
+        roomId: "",
+      };
+
+      socket.on("try_join_game", async (done) => {
+        try {
+          let notInGameSocket: RemoteSocket<AnyObject, AnyObject> | undefined;
+          const allConnectSocket = await this.io.fetchSockets();
+          for (const socket of allConnectSocket) {
+            if (isEmpty(socket.data.user.roomId)) {
+              notInGameSocket = socket;
+            }
+            break;
+          }
+          if (isNil(notInGameSocket)) {
+            done(false);
+          } else {
+            // create room
+            const room = this.roomStore.createRoom();
+            // join self to room
+            socket.join(room.id);
+            socket.data.user.roomId = room.id;
+            const selfParticipant = createParticipant(socket.data.user.name, socket.id);
+            room.addParticipant(selfParticipant);
+            // join other to room
+            notInGameSocket.join(room.id);
+            notInGameSocket.data.user.roomId = room.id;
+            const otherParticipant = createParticipant(
+              notInGameSocket.data.user.name,
+              notInGameSocket.id
+            );
+            room.addParticipant(otherParticipant);
+            // notify_client_join_game
+            socket.emit("join_game");
+            this.io.to(notInGameSocket.id).emit("join_game");
+            done(true);
+          }
+        } catch (err) {
+          dummyHandleError(new Error("oops"));
+        }
       });
 
-      socket.on("join-game", () => {
-        withUserCheck(socket, () => {
-          const notEmptyRoom = this.roomStore.getNotEmptyRoom();
-          if (!isNil(notEmptyRoom)) {
-            const user = socket.request.session.user as SessionUser;
-            user.roomId = notEmptyRoom.id;
-            socket.request.session.save(() => {
-              socket.data.roomId = notEmptyRoom.id;
-              const participant = createParticipant(user.name, socket.id);
-              notEmptyRoom.addParticipant(participant);
-              if (notEmptyRoom.isParticipantFull()) {
-                this.io.in(socket.data.roomId).emit("game-start");
-                notEmptyRoom.startCountDown(
-                  (sec) => {
-                    this.io.in(socket.data.roomId).emit("game-countdown", sec);
+      socket.on("ready", async (done) => {
+        const room = this.roomStore.findRoom(socket.data.user.roomId);
+        if (!isNil(room)) {
+          room.updateParticipantReady(socket.id);
+          done(true);
+          if (room.isParticipantReady()) {
+            await delay(2);
+            room.startBeforeGameStartCountDown(
+              (leftSec: number) => {
+                this.io.to(socket.data.user.roomId).emit("before_start_game", leftSec);
+              },
+              () => {
+                room.startCountDown(
+                  (leftSec: number) => {
+                    this.io.to(socket.data.user.roomId).emit("game_leftSec", leftSec);
                   },
                   () => {
-                    this.io.in(socket.data.roomId).emit("game-over");
+                    const result = room.getResult();
+                    this.io.to(socket.data.user.roomId).emit("game_over", result);
                   }
                 );
               }
-            });
+            );
+            room.startCountDown();
           }
-        });
+        } else {
+          socket.data.user.roomId = "";
+          done(false);
+        }
       });
 
-      socket.on("leave-game", () => {
-        const leaveRoom = () => {
-          if (!isNil(socket.data.roomId)) {
-            const roomId = socket.data.roomId;
-            delete socket.data.roomId;
-            const room = this.roomStore.findRoom(roomId);
-            if (!isNil(room)) {
-              room.removeParticipant(socket.id);
+      socket.on("leave_game", () => {
+        if (!isEmpty(socket.data.user.roomId)) {
+          const roomId = socket.data.user.roomId;
+          socket.data.user.roomId = "";
+          socket.leave(roomId);
+          const room = this.roomStore.findRoom(roomId);
+          if (!isNil(room)) {
+            room.stopCountDown();
+            room.removeParticipant(socket.id);
+            if (room.isParticipantEmpty()) {
+              this.roomStore.removeRoom(room.id);
+            } else {
+              if (room.leftSec !== 0) {
+                this.io.to(roomId).emit("game_interrupted");
+              }
             }
           }
-        };
-        if (!isNil(socket.request.session.user)) {
-          socket.request.session.user.roomId = "";
-          socket.request.session.save(leaveRoom);
-        } else {
-          leaveRoom();
         }
       });
 
       socket.on("disconnect", () => {
-        logger.log("user is disconnect");
-        const handleDisconnect = () => {
-          if (!isNil(socket.data.roomId)) {
-            const roomId = socket.data.roomId;
-            delete socket.data.roomId;
-            const room = this.roomStore.findRoom(roomId);
-            if (!isNil(room)) {
-              room.removeParticipant(socket.id);
-              if (room.isParticipantEmpty()) {
-                this.io.in(room.id).disconnectSockets();
-                this.roomStore.removeRoom(roomId);
-              }
+        if (!isEmpty(socket.data.user.roomId)) {
+          const room = this.roomStore.findRoom(socket.data.user.roomId);
+          if (!isNil(room)) {
+            room.stopCountDown();
+            if (room.leftSec !== 0) {
+              this.io.to(socket.data.user.roomId).emit("game_interrupted");
             }
           }
-        };
-        if (!isNil(socket.request.session.user)) {
-          socket.request.session.user.socketId = "";
-          socket.request.session.user.roomId = "";
-          socket.request.session.save(handleDisconnect);
-        } else {
-          handleDisconnect();
         }
+        clearInterval(timer);
       });
-
-      // socket.on("game-nextPolyominoUpdated", (nextPolyominoType) => {
-      //   socket.to(room.id).emit("opponent-nextPolyominoUpdated", nextPolyominoType);
-      // });
-
-      // socket.on("game-PolyominoUpdated", (polyomino) => {
-      //   socket.to(room.id).emit("opponent-nextPolyominoUpdated", polyomino);
-      // });
-
-      // socket.on("game-tetrisUpdated", (tetris) => {
-      //   socket.to(room.id).emit("opponent-nextPolyominoUpdated", tetris);
-      // });
-
-      // socket.on("game-scoreUpdated", (participantId: string, score: number) => {
-      //   room.updateParticipantScore(participantId, score);
-      //   socket.to(room.id).emit("opponent-nextScoreUpdated", score);
-      // });
     });
   }
 }

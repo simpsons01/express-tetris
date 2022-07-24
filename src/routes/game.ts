@@ -20,8 +20,6 @@ router.post(
         if (err) return next(err);
         req.session.user = {
           name: !isNil(name) ? name : createRandomName(),
-          socketId: "",
-          roomId: "",
         };
         res.status(200).json(req.session.user);
       });

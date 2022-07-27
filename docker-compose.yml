@@ -18,3 +18,11 @@ services:
       - web
     ports:
       - "3030:8080"
+  redis:
+    build:
+      context: ./.redis
+      dockerfile: Dockerfile.developnment
+    volumes:
+      - .redis/data:/data
+    ports:
+      - 6379:6379

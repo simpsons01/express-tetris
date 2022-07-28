@@ -34,7 +34,7 @@ router.post("/offline", function (req: Request, res: Response, next: NextFunctio
     req.session.regenerate((err) => {
       if (err) return next(err);
       req.session.user = null;
-      res.status(200);
+      res.status(200).end();
     });
   } else {
     res.status(200).end();

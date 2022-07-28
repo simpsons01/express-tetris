@@ -2,8 +2,8 @@ import { delay, logger } from "../../../util";
 import { RemoteSocket, Server as SocketServer } from "socket.io";
 import { createRoomStore, IRoomStore, createParticipant, ROOM_STATE } from "./_room";
 import { Server as HttpServer } from "http";
-import { AnyObject, SessionUser } from "../../../util/types";
-import { isEmpty, isNil } from "ramda";
+import { AnyFunction, AnyObject, SessionUser } from "../../../util/types";
+import { isEmpty, isNil, is } from "ramda";
 
 // TODO: 創建socket的options不行是AnyObject
 export type SocketServerOptions = AnyObject;
@@ -12,10 +12,15 @@ const dummyHandleError = (error: Error) => {
   throw error;
 };
 
+const withDone =
+  (done: AnyFunction) =>
+  (isDone: boolean): void => {
+    if (is(Function, done)) done(isDone);
+  };
+
 class GameSocketService {
   io: SocketServer;
   roomStore: IRoomStore;
-  waitList: Array<string> = [];
 
   constructor(httpServer: HttpServer, options: SocketServerOptions) {
     this.io = new SocketServer(httpServer, options);
@@ -46,6 +51,7 @@ class GameSocketService {
           }
         });
       }, 3000);
+
       socket.data.user = {
         sessionId: socket.request.session.id,
         name: (socket.request.session.user as SessionUser).name,
@@ -64,17 +70,17 @@ class GameSocketService {
             if (!isNil(notInGameSocket)) break;
           }
           if (isNil(notInGameSocket)) {
-            done(false);
+            withDone(done)(false);
           } else {
             // create room
             const room = this.roomStore.createRoom();
             // join self to room
-            socket.join(room.id);
+            this.io.in(socket.id).socketsJoin(room.id);
             socket.data.user.roomId = room.id;
             const selfParticipant = createParticipant(socket.data.user.name, socket.id);
             room.addParticipant(selfParticipant);
             // join other to room
-            notInGameSocket.join(room.id);
+            this.io.in(notInGameSocket.id).socketsJoin(room.id);
             notInGameSocket.data.user.roomId = room.id;
             const otherParticipant = createParticipant(
               notInGameSocket.data.user.name,
@@ -82,11 +88,11 @@ class GameSocketService {
             );
             room.addParticipant(otherParticipant);
             // notify_client_join_game
-            socket.emit("join_game");
-            this.io.to(notInGameSocket.id).emit("join_game");
-            done(true);
+            this.io.to(room.id).emit("join_game");
+            withDone(done)(true);
           }
         } catch (err) {
+          withDone(done)(false);
           dummyHandleError(new Error("oops"));
         }
       });
@@ -97,7 +103,7 @@ class GameSocketService {
         if (!isNil(room)) {
           room.updateParticipantReady(socket.id);
           if (room.isRoomReady()) {
-            done(true);
+            withDone(done)(true);
             await delay(1);
             if (room.state !== ROOM_STATE.GAME_START) {
               room.startBeforeGameStartCountDown(
@@ -105,6 +111,7 @@ class GameSocketService {
                   this.io.to(socket.data.user.roomId).emit("before_start_game", leftSec);
                 },
                 () => {
+                  this.io.to(socket.data.user.roomId).emit("game_start");
                   room.setState(ROOM_STATE.GAME_START);
                   room.startCountDown(
                     (leftSec: number) => {
@@ -120,15 +127,15 @@ class GameSocketService {
               );
             }
           } else {
-            done(false);
+            withDone(done)(false);
           }
         } else {
           socket.data.user.roomId = "";
-          done(false);
+          withDone(done)(false);
         }
       });
 
-      socket.on("leave_game", () => {
+      socket.on("leave_game", (done) => {
         console.log("participant leave game! and participant id is  ", socket.id);
         if (!isEmpty(socket.data.user.roomId)) {
           const roomId = socket.data.user.roomId;
@@ -143,11 +150,16 @@ class GameSocketService {
             } else {
               if (room.state === ROOM_STATE.GAME_START) {
                 room.stopCountDown();
+              }
+              if (room.state === ROOM_STATE.GAME_START || room.state === ROOM_STATE.CREATED) {
                 room.setState(ROOM_STATE.GAME_INTERRUPT);
-                this.io.to(roomId).emit("game_interrupted");
+                this.io.to(room.id).emit("game_interrupted");
               }
             }
           }
+          withDone(done)(true);
+        } else {
+          withDone(done)(false);
         }
       });
 
@@ -170,8 +182,10 @@ class GameSocketService {
             } else {
               if (room.state === ROOM_STATE.GAME_START) {
                 room.stopCountDown();
+              }
+              if (room.state === ROOM_STATE.GAME_START || room.state === ROOM_STATE.CREATED) {
                 room.setState(ROOM_STATE.GAME_INTERRUPT);
-                this.io.to(socket.data.user.roomId).emit("game_interrupted");
+                this.io.to(room.id).emit("game_interrupted");
               }
             }
           }

@@ -93,6 +93,7 @@ class Room implements IRoom {
         this._beforeStartTimer = null;
       }
     }, 1000);
+    if (is(Function, onCountDown)) onCountDown(leftSec);
   }
 
   startCountDown(
@@ -108,6 +109,7 @@ class Room implements IRoom {
         this._timer = null;
       }
     }, 1000);
+    if (is(Function, onCountDown)) onCountDown(this.leftSec);
   }
 
   stopCountDown() {

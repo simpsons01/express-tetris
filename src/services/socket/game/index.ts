@@ -51,6 +51,7 @@ class GameSocketService {
         name: (socket.request.session.user as SessionUser).name,
         roomId: "",
       };
+
       socket.on("try_join_game", async (done) => {
         console.log("participant is trying to join game! and participant id is  ", socket.id);
         try {
@@ -147,6 +148,12 @@ class GameSocketService {
               }
             }
           }
+        }
+      });
+
+      socket.on("game_data_updated", (type, data) => {
+        if (socket.data.user.roomId) {
+          socket.to(socket.data.user.roomId).emit(type, data);
         }
       });
 

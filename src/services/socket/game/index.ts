@@ -163,9 +163,9 @@ class GameSocketService {
         }
       });
 
-      socket.on("game_data_updated", (type, data) => {
+      socket.on("game_data_updated", (updatedQueue) => {
         if (socket.data.user.roomId) {
-          socket.to(socket.data.user.roomId).emit(type, data);
+          socket.to(socket.data.user.roomId).emit("other_game_data_updated", updatedQueue);
         }
       });
 

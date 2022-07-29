@@ -212,7 +212,7 @@ class RoomStore implements IRoomStore {
 
   createRoom(id?: string): IRoom {
     const ROOM_DEFAULT_PARTICIPANT_NUM = 2;
-    const ROOM_DEFAULT_LEFT_SEC = 10;
+    const ROOM_DEFAULT_LEFT_SEC = 60;
     const roomId = isNil(id) ? uuidv4() : id;
     const room = new Room(roomId, ROOM_DEFAULT_PARTICIPANT_NUM, ROOM_DEFAULT_LEFT_SEC);
     this.addRoom(room);

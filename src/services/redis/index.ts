@@ -1,15 +1,25 @@
 import env from "../../env";
-import * as Redis from "redis";
+import { createClient, RedisClient } from "redis";
+import { isNil } from "ramda";
+import { logger } from "../../util";
 
-const redisClient = Redis.createClient({
-  legacyMode: true,
-  url: `redis://${env.REDIS_HOST_URL}:${env.REDIS_HOST_PORT}`,
-});
+let redisClient: RedisClient;
 
-export default {
-  // TODO: 先偷懶，躲過ts檢查
-  getRedisClient: (): typeof redisClient => redisClient,
-  async connect(): Promise<void> {
-    await redisClient.connect();
-  },
+export enum ERROR_CODE {
+  CONNECT_DROP = "NR_CLOSED",
+  COMMAND_REJECT = "UNCERTAIN_STATE",
+  CONNECT_BROKEN = "CONNECTION_BROKEN",
+}
+
+export const getRedisClient = (): RedisClient => {
+  if (isNil(redisClient)) {
+    redisClient = createClient({
+      url: `redis://${env.REDIS_HOST_URL}:${env.REDIS_HOST_PORT}`,
+    });
+  }
+  return redisClient;
+};
+
+export const handleRedisError = (err: Error): void => {
+  logger.error(err);
 };

@@ -8,23 +8,22 @@ import gameSocket from "./services/socket/game/index";
 import session from "express-session";
 import env from "./env";
 import { isDev, logger } from "./util/index";
-import redis from "./services/redis";
+import { getRedisClient } from "./services/redis";
 import CreateRedisStore from "connect-redis";
+import { createAdapter } from "@socket.io/redis-adapter";
 
 class App {
   async run() {
     try {
-      // connect to redis
-      console.log("connecting to redis");
       const RedisStore = CreateRedisStore(session);
-      await redis.connect();
-      console.log("connecting to redis successfully!");
+      const pubClient = getRedisClient();
+      const subClient = pubClient.duplicate();
 
       // initialize
       const app = express();
       const httpServer = http.createServer(app);
       const sessionMiddleware = session({
-        store: new RedisStore({ client: redis.getRedisClient() }),
+        store: new RedisStore({ client: pubClient }),
         secret: env.SESSION_SECRET as string,
         cookie: {
           secure: !isDev(),
@@ -50,8 +49,13 @@ class App {
         },
       });
       gameSocketInstance.io.use((socket, next) => {
-        sessionMiddleware(socket.request as Request, {} as Response, next as NextFunction);
+        sessionMiddleware(
+          socket.request as Request,
+          {} as Response,
+          next as NextFunction
+        );
       });
+      gameSocketInstance.io.adapter(createAdapter(pubClient, subClient));
       gameSocketInstance.listen();
       // @ts-ignore
       global.gameSocketInstance = gameSocketInstance;

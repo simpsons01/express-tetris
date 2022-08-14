@@ -34,12 +34,22 @@ export enum ROOM_STATE {
 
 export class Room {
   id: string;
+  name: string;
+  host: Participant;
   state: ROOM_STATE = ROOM_STATE.CREATED;
   participantLimitNum: number;
   participants: Array<Participant> = [];
 
-  constructor(id: string, participantLimitNum: number) {
+  constructor(
+    id: string,
+    name: string,
+    host: Participant,
+    participantLimitNum: number
+  ) {
     this.id = id;
+    this.name = name;
+    this.host = host;
+    this.participants.push(host);
     this.participantLimitNum = participantLimitNum;
   }
 
@@ -230,12 +240,12 @@ export class RoomManager {
     return room;
   }
 
-  async createRoom(): Promise<Room> {
+  async createRoom(name: string, host: Participant): Promise<Room> {
     const roomNum = (await this._getRoomNum()) ?? 0;
-    const roomId = `room:${roomNum + 1}`;
-    const room = new Room(roomId, DEFAULT_ROOM_PARTICIPANT_NUM);
-    await this._setRoom(roomId, room);
-    await this._setRoomIdSet(roomId);
+    const roomId = `${roomNum + 1}`;
+    const room = new Room(roomId, name, host, DEFAULT_ROOM_PARTICIPANT_NUM);
+    await this._setRoom("room:" + roomId, room);
+    await this._setRoomIdSet("room:" + roomId);
     return room;
   }
 

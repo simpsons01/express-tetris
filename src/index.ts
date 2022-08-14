@@ -2,8 +2,6 @@ import http from "http";
 import cors from "cors";
 import express, { Request, Response, NextFunction } from "express";
 import bodyParser from "body-parser";
-import rootRouter from "./routes/root";
-import gameRouter from "./routes/game";
 import gameSocket from "./services/socket/game/index";
 import session from "express-session";
 import env from "./env";
@@ -62,8 +60,6 @@ class App {
 
       // router
       app.use("/health-check", (req, res) => res.status(200));
-      app.use("/", rootRouter);
-      app.use("/game", gameRouter);
 
       // start app
       const port = env.PORT || 3030;

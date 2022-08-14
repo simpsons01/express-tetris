@@ -14,6 +14,33 @@ import { isNil, is, isEmpty } from "ramda";
 // TODO: 創建socket的options不行是AnyObject
 export type SocketServerOptions = AnyObject;
 
+export type SocketPayload = {
+  data: AnyObject;
+  metadata: {
+    message?: string;
+    isSuccess: boolean;
+    isError: boolean;
+  };
+};
+
+const createResponse = (
+  data: AnyObject,
+  {
+    message,
+    isSuccess = true,
+    isError = false,
+  }: { isSuccess?: boolean; isError?: boolean; message?: string } = {}
+): SocketPayload => ({
+  data: {
+    ...(isNil(data) ? {} : data),
+  },
+  metadata: {
+    ...(isNil(message) ? {} : { message }),
+    isSuccess,
+    isError,
+  },
+});
+
 const withDone =
   (done: AnyFunction) =>
   (arg: any): void => {
@@ -33,10 +60,6 @@ class GameSocketService {
 
   listen(): void {
     this.io.use(async (socket, next) => {
-      if (isNil(socket.request.session.user)) {
-        next(new Error("not auth"));
-        return;
-      }
       const allConnectSocket = await this.io.fetchSockets();
       for (const _socket of allConnectSocket) {
         if (socket.request.session.id === _socket.data.user.sessionId) {
@@ -47,21 +70,9 @@ class GameSocketService {
       next();
     });
     this.io.on("connection", (socket) => {
-      const timer = setInterval(() => {
-        socket.request.session.reload((err) => {
-          if (err) {
-            socket.emit("error_occur");
-            return;
-          }
-          if (isNil(socket.request.session.user)) {
-            return socket.disconnect();
-          }
-        });
-      }, 3000);
-
       socket.data.user = {
         sessionId: socket.request.session.id,
-        name: (socket.request.session.user as SessionUser).name,
+        name: "",
         roomId: "",
       };
 
@@ -83,42 +94,92 @@ class GameSocketService {
           }
         };
 
-      socket.on("get_room", async (done) => {
+      socket.on("set_name", async (name: string, done) => {
+        if (isEmpty(socket.data.user.name)) {
+          const allConnectSocket = await this.io.fetchSockets();
+          for (const _socket of allConnectSocket) {
+            if (name === _socket.data.user.name) {
+              withDone(done)(
+                createResponse(
+                  {},
+                  { isSuccess: false, message: "DUPLICATE NAME" }
+                )
+              );
+            } else {
+              if (isNil(socket.request.session.user)) {
+                socket.request.session.user = { name: "" };
+              }
+              socket.request.session.user.name = name;
+              socket.request.session.save(function (err) {
+                if (err)
+                  return withDone(done)(
+                    createResponse({}, { isSuccess: false, isError: true })
+                  );
+
+                socket.data.user.name = name;
+                withDone(done)(createResponse({}, { isSuccess: true }));
+              });
+            }
+          }
+        } else {
+          withDone(done)(createResponse({}, { isSuccess: false }));
+        }
+      });
+
+      socket.on("get_rooms", async (done) => {
         withBroadcastRoomManagerError(
           async () => {
             const rooms = await this.roomManager.getRooms();
-            withDone(done)(rooms);
+            withDone(done)(createResponse({ rooms }));
           },
           () => {
-            withDone(done)(false);
+            withDone(done)(
+              createResponse(
+                { rooms: null },
+                { isSuccess: false, isError: true }
+              )
+            );
           }
         )();
       });
 
-      socket.on("create_room", async (done) => {
-        withBroadcastRoomManagerError(
-          async () => {
-            if (isEmpty(socket.data.user.roomId)) {
-              const room = await this.roomManager.createRoom();
-              const participant = new Participant(
-                socket.data.user.name,
-                socket.id
+      socket.on("create_room", async (roomName: string, done) => {
+        if (!isEmpty(socket.data.user.name)) {
+          withBroadcastRoomManagerError(
+            async () => {
+              if (isEmpty(socket.data.user.roomId)) {
+                const participant = new Participant(
+                  socket.data.user.name,
+                  socket.id
+                );
+                const room = await this.roomManager.createRoom(
+                  roomName,
+                  participant
+                );
+                Room.updateState(room, ROOM_STATE.WAITING_ROOM_FULL);
+                await this.roomManager.updateRoom(room.id, room);
+                socket.join(room.id);
+                socket.data.user.roomId = room.id;
+                this.roomTimerManager.createTimer(room.id);
+                withDone(done)(createResponse({ roomId: room.id }));
+              } else {
+                withDone(done)(
+                  createResponse({ roomId: null }, { isSuccess: false })
+                );
+              }
+            },
+            () => {
+              withDone(done)(
+                createResponse(
+                  { roomId: null },
+                  { isSuccess: false, isError: true }
+                )
               );
-              Room.addParticipant(room, participant);
-              Room.updateState(room, ROOM_STATE.WAITING_ROOM_FULL);
-              await this.roomManager.updateRoom(room.id, room);
-              socket.join(room.id);
-              socket.data.user.roomId = room.id;
-              this.roomTimerManager.createTimer(room.id);
-              withDone(done)(true);
-            } else {
-              withDone(done)(false);
             }
-          },
-          () => {
-            withDone(done)(false);
-          }
-        )();
+          )();
+        } else {
+          createResponse({ roomId: null }, { isSuccess: false });
+        }
       });
 
       socket.on("join_room", async (roomId: string, done) => {
@@ -126,28 +187,34 @@ class GameSocketService {
           "participant is trying to join game! and participant id is  ",
           socket.id
         );
-        withBroadcastRoomManagerError(
-          async () => {
-            const room = await this.roomManager.getRoom(roomId);
-            if (!isNil(room)) {
-              const participant = new Participant(
-                socket.data.user.name,
-                socket.id
+        if (!isEmpty(socket.data.user.name)) {
+          withBroadcastRoomManagerError(
+            async () => {
+              const room = await this.roomManager.getRoom(roomId);
+              if (!isNil(room)) {
+                const participant = new Participant(
+                  socket.data.user.name,
+                  socket.id
+                );
+                Room.addParticipant(room, participant);
+                await this.roomManager.updateRoom(roomId, room);
+                // join self to room
+                socket.join(roomId);
+                socket.data.user.roomId = roomId;
+                withDone(done)(createResponse({}, { isSuccess: true }));
+              } else {
+                withDone(done)(createResponse({}, { isSuccess: false }));
+              }
+            },
+            () => {
+              withDone(done)(
+                createResponse({}, { isSuccess: false, isError: true })
               );
-              Room.addParticipant(room, participant);
-              await this.roomManager.updateRoom(roomId, room);
-              // join self to room
-              socket.join(roomId);
-              socket.data.user.roomId = roomId;
-              withDone(done)(true);
-            } else {
-              withDone(done)(false);
             }
-          },
-          () => {
-            withDone(done)(false);
-          }
-        )();
+          )();
+        } else {
+          withDone(done)(createResponse({}, { isSuccess: false }));
+        }
       });
 
       socket.on("ready", async (done) => {
@@ -203,18 +270,20 @@ class GameSocketService {
                   );
                 } else {
                   await this.roomManager.updateRoom(room.id, room);
-                  withDone(done)(false);
+                  withDone(done)(createResponse({}, { isSuccess: true }));
                 }
               } else {
-                withDone(done)(false);
+                withDone(done)(createResponse({}, { isSuccess: false }));
               }
             },
             () => {
-              withDone(done)(false);
+              withDone(done)(
+                createResponse({}, { isSuccess: false, isError: true })
+              );
             }
           )({ roomId: socket.data.user.roomId });
         } else {
-          withDone(done)(false);
+          withDone(done)(createResponse({}, { isSuccess: false }));
         }
       });
 
@@ -231,7 +300,7 @@ class GameSocketService {
                 await this.roomManager.updateRoom(room.id, room);
                 socket.leave(room.id);
                 socket.data.user.roomId = "";
-                withDone(done)(true);
+                withDone(done)(createResponse({}, { isSuccess: true }));
                 withBroadcastRoomManagerError(async () => {
                   if (Room.isRoomEmpty(room)) {
                     if (this.roomTimerManager.hasTimer(room.id)) {
@@ -257,15 +326,17 @@ class GameSocketService {
                   }
                 })({ roomId: room.id });
               } else {
-                withDone(done)(false);
+                withDone(done)(createResponse({}, { isSuccess: false }));
               }
             },
             () => {
-              withDone(done)(false);
+              withDone(done)(
+                createResponse({}, { isSuccess: false, isError: true })
+              );
             }
           )({ roomId });
         } else {
-          withDone(done)(false);
+          withDone(done)(createResponse({}, { isSuccess: false }));
         }
       });
 
@@ -274,9 +345,9 @@ class GameSocketService {
           const roomId = socket.data.user.roomId;
           socket.data.user.roomId = "";
           socket.leave(roomId);
-          withDone(done)(true);
+          withDone(done)(createResponse({}, { isSuccess: true }));
         } else {
-          withDone(done)(false);
+          withDone(done)(createResponse({}, { isSuccess: false }));
         }
       });
 

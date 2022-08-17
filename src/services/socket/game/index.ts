@@ -14,7 +14,7 @@ import { isNil, is, isEmpty } from "ramda";
 // TODO: 創建socket的options不行是AnyObject
 export type SocketServerOptions = AnyObject;
 
-export type SocketPayload = {
+export type SocketResponsePayload = {
   data: AnyObject;
   metadata: {
     message?: string;
@@ -30,7 +30,7 @@ const createResponse = (
     isSuccess = true,
     isError = false,
   }: { isSuccess?: boolean; isError?: boolean; message?: string } = {}
-): SocketPayload => ({
+): SocketResponsePayload => ({
   data: {
     ...(isNil(data) ? {} : data),
   },
@@ -72,7 +72,7 @@ class GameSocketService {
     this.io.on("connection", (socket) => {
       socket.data.user = {
         sessionId: socket.request.session.id,
-        name: "",
+        name: socket.request.session.user?.name || "",
         roomId: "",
       };
 
@@ -93,6 +93,10 @@ class GameSocketService {
             }
           }
         };
+
+      socket.on("has_name", (done) => {
+        withDone(done)(isEmpty(socket.data.user.name));
+      });
 
       socket.on("set_name", async (name: string, done) => {
         if (isEmpty(socket.data.user.name)) {
@@ -164,7 +168,10 @@ class GameSocketService {
                 withDone(done)(createResponse({ roomId: room.id }));
               } else {
                 withDone(done)(
-                  createResponse({ roomId: null }, { isSuccess: false })
+                  createResponse(
+                    { roomId: null },
+                    { isSuccess: false, message: "USER IS IN SOME ROOM" }
+                  )
                 );
               }
             },
@@ -178,7 +185,10 @@ class GameSocketService {
             }
           )();
         } else {
-          createResponse({ roomId: null }, { isSuccess: false });
+          createResponse(
+            { roomId: null },
+            { isSuccess: false, message: "NAME REQUIRED" }
+          );
         }
       });
 
@@ -400,7 +410,6 @@ class GameSocketService {
             }
           }
         })({ shouldNotify: false });
-        clearInterval(timer);
       });
     });
   }

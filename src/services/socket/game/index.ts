@@ -8,7 +8,7 @@ import {
   DEFAULT_GAME_END_LEFT_SEC,
 } from "./_timer";
 import { Server as HttpServer } from "http";
-import { AnyFunction, AnyObject, SessionUser } from "../../../util/types";
+import { AnyFunction, AnyObject } from "../../../util/types";
 import { isNil, is, isEmpty } from "ramda";
 
 // TODO: 創建socket的options不行是AnyObject
@@ -76,7 +76,78 @@ class GameSocketService {
         roomId: "",
       };
 
-      const withBroadcastRoomManagerError =
+      const onLeave = async (room: Room) => {
+        const isRoomEmpty = Room.isRoomEmpty(room);
+        const isHost = room.host.id === socket.id;
+        if (isRoomEmpty || isHost) {
+          if (this.roomTimerManager.hasTimer(room.id)) {
+            const roomTimer = this.roomTimerManager.getTimer(
+              room.id
+            ) as RoomTimer;
+            roomTimer.clear();
+            this.roomTimerManager.deleteTimer(room.id);
+          }
+          await this.roomManager.deleteRoom(room.id);
+          if (!isRoomEmpty) {
+            this.io.in(room.id).emit("room_host_leave");
+          }
+        } else {
+          if (
+            room.state === ROOM_STATE.GAME_START ||
+            room.state === ROOM_STATE.GAME_BEFORE_START
+          ) {
+            Room.updateState(room, ROOM_STATE.GAME_INTERRUPT);
+            await this.roomManager.updateRoom(room.id, room);
+            const roomTimer = this.roomTimerManager.getTimer(room.id);
+            if (!isNil(roomTimer)) {
+              roomTimer.clear();
+            }
+            this.io.in(room.id).emit("game_interrupted");
+          }
+        }
+      };
+
+      const onReady = (room: Room) => {
+        const roomTimer = (() => {
+          let _roomTimer: RoomTimer | undefined;
+          _roomTimer = this.roomTimerManager.getTimer(room.id);
+          if (isNil(_roomTimer)) {
+            _roomTimer = this.roomTimerManager.createTimer(room.id);
+          }
+          return _roomTimer;
+        })();
+        roomTimer.startBeforeGameStartCountDown(
+          DEFAULT_BEFORE_GAME_START_LEFT_SEC,
+          (leftSec: number) => {
+            this.io.in(room.id).emit("before_start_game", leftSec);
+          },
+          () => {
+            withRedisError(async () => {
+              roomTimer.clearBeforeGameStartCountDown();
+              Room.updateState(room, ROOM_STATE.GAME_START);
+              await this.roomManager.updateRoom(room.id, room);
+              this.io.in(room.id).emit("game_start");
+              roomTimer.startGameEndCountDown(
+                DEFAULT_GAME_END_LEFT_SEC,
+                (leftSec: number) => {
+                  this.io.in(room.id).emit("game_leftSec", leftSec);
+                },
+                () => {
+                  withRedisError(async () => {
+                    Room.updateState(room, ROOM_STATE.GAME_END);
+                    await this.roomManager.updateRoom(room.id, room);
+                    roomTimer.clearGameEndCountDown();
+                    const result = Room.getResult(room);
+                    this.io.in(room.id).emit("game_over", result);
+                  })({ roomId: room.id });
+                }
+              );
+            })({ roomId: room.id });
+          }
+        );
+      };
+
+      const withRedisError =
         (action: AnyFunction, onError?: AnyFunction) =>
         async ({ roomId = "", shouldNotify = true } = {}): Promise<void> => {
           try {
@@ -94,8 +165,9 @@ class GameSocketService {
           }
         };
 
-      socket.on("has_name", (done) => {
-        withDone(done)(isEmpty(socket.data.user.name));
+      socket.on("get_socket_data", (done) => {
+        const { name, roomId } = socket.data.user;
+        withDone(done)(createResponse({ name, roomId }));
       });
 
       socket.on("set_name", async (name: string, done) => {
@@ -131,7 +203,7 @@ class GameSocketService {
       });
 
       socket.on("get_rooms", async (done) => {
-        withBroadcastRoomManagerError(
+        withRedisError(
           async () => {
             const rooms = await this.roomManager.getRooms();
             withDone(done)(createResponse({ rooms }));
@@ -149,7 +221,7 @@ class GameSocketService {
 
       socket.on("create_room", async (roomName: string, done) => {
         if (!isEmpty(socket.data.user.name)) {
-          withBroadcastRoomManagerError(
+          withRedisError(
             async () => {
               if (isEmpty(socket.data.user.roomId)) {
                 const participant = new Participant(
@@ -198,7 +270,7 @@ class GameSocketService {
           socket.id
         );
         if (!isEmpty(socket.data.user.name)) {
-          withBroadcastRoomManagerError(
+          withRedisError(
             async () => {
               const room = await this.roomManager.getRoom(roomId);
               if (!isNil(room)) {
@@ -229,7 +301,7 @@ class GameSocketService {
 
       socket.on("ready", async (done) => {
         if (!isEmpty(socket.data.user.roomId)) {
-          withBroadcastRoomManagerError(
+          withRedisError(
             async () => {
               const room = await this.roomManager.getRoom(
                 socket.data.user.roomId
@@ -239,45 +311,8 @@ class GameSocketService {
                 if (Room.isRoomReady(room)) {
                   Room.updateState(room, ROOM_STATE.GAME_BEFORE_START);
                   await this.roomManager.updateRoom(room.id, room);
-                  withDone(done)(true);
-                  await delay(1);
-                  const roomTimer = (() => {
-                    let _roomTimer: RoomTimer | undefined;
-                    _roomTimer = this.roomTimerManager.getTimer(room.id);
-                    if (isNil(_roomTimer)) {
-                      _roomTimer = this.roomTimerManager.createTimer(room.id);
-                    }
-                    return _roomTimer;
-                  })();
-                  roomTimer.startBeforeGameStartCountDown(
-                    DEFAULT_BEFORE_GAME_START_LEFT_SEC,
-                    (leftSec: number) => {
-                      this.io.in(room.id).emit("before_start_game", leftSec);
-                    },
-                    () => {
-                      withBroadcastRoomManagerError(async () => {
-                        roomTimer.clearBeforeGameStartCountDown();
-                        Room.updateState(room, ROOM_STATE.GAME_START);
-                        await this.roomManager.updateRoom(room.id, room);
-                        this.io.in(room.id).emit("game_start");
-                        roomTimer.startGameEndCountDown(
-                          DEFAULT_GAME_END_LEFT_SEC,
-                          (leftSec: number) => {
-                            this.io.in(room.id).emit("game_leftSec", leftSec);
-                          },
-                          () => {
-                            withBroadcastRoomManagerError(async () => {
-                              Room.updateState(room, ROOM_STATE.GAME_END);
-                              await this.roomManager.updateRoom(room.id, room);
-                              roomTimer.clearGameEndCountDown();
-                              const result = Room.getResult(room);
-                              this.io.in(room.id).emit("game_over", result);
-                            })({ roomId: room.id });
-                          }
-                        );
-                      })({ roomId: room.id });
-                    }
-                  );
+                  withDone(done)(createResponse({}, { isSuccess: true }));
+                  onReady(room);
                 } else {
                   await this.roomManager.updateRoom(room.id, room);
                   withDone(done)(createResponse({}, { isSuccess: true }));
@@ -297,10 +332,10 @@ class GameSocketService {
         }
       });
 
-      socket.on("leave_game", (done) => {
+      socket.on("leave_room", (done) => {
         const roomId = socket.data.user.roomId;
         if (!isEmpty(roomId)) {
-          withBroadcastRoomManagerError(
+          withRedisError(
             async () => {
               const room = await this.roomManager.getRoom(
                 socket.data.user.roomId
@@ -310,33 +345,42 @@ class GameSocketService {
                 await this.roomManager.updateRoom(room.id, room);
                 socket.leave(room.id);
                 socket.data.user.roomId = "";
+                await onLeave(room);
                 withDone(done)(createResponse({}, { isSuccess: true }));
-                withBroadcastRoomManagerError(async () => {
-                  if (Room.isRoomEmpty(room)) {
-                    if (this.roomTimerManager.hasTimer(room.id)) {
-                      const roomTimer = this.roomTimerManager.getTimer(
-                        room.id
-                      ) as RoomTimer;
-                      roomTimer.clear();
-                      this.roomTimerManager.deleteTimer(room.id);
-                    }
-                    await this.roomManager.deleteRoom(room.id);
-                  } else {
-                    if (
-                      room.state === ROOM_STATE.GAME_START ||
-                      room.state === ROOM_STATE.GAME_BEFORE_START
-                    ) {
-                      Room.updateState(room, ROOM_STATE.GAME_INTERRUPT);
-                      await this.roomManager.updateRoom(room.id, room);
-                      const roomTimer = this.roomTimerManager.getTimer(room.id);
-                      if (!isNil(roomTimer)) {
-                        roomTimer.clear();
-                      }
-                    }
-                  }
-                })({ roomId: room.id });
               } else {
-                withDone(done)(createResponse({}, { isSuccess: false }));
+                socket.leave(roomId);
+                socket.data.user.roomId = "";
+                withDone(done)(createResponse({}, { isSuccess: true }));
+              }
+            },
+            () => {
+              withDone(done)(
+                createResponse({}, { isSuccess: false, isError: true })
+              );
+            }
+          )({ roomId });
+        } else {
+          withDone(done)(createResponse({}, { isSuccess: false }));
+        }
+      });
+
+      socket.on("reset_room", (done) => {
+        const roomId = socket.data.user.roomId;
+        if (!isEmpty(roomId)) {
+          withRedisError(
+            async () => {
+              const room = await this.roomManager.getRoom(
+                socket.data.user.roomId
+              );
+              if (!isNil(room)) {
+                if (
+                  room.state === ROOM_STATE.GAME_END ||
+                  room.state === ROOM_STATE.GAME_INTERRUPT
+                ) {
+                  Room.reset(room);
+                  await this.roomManager.updateRoom(room.id, room);
+                }
+                withDone(done)(createResponse({}, { isSuccess: true }));
               }
             },
             () => {
@@ -355,10 +399,8 @@ class GameSocketService {
           const roomId = socket.data.user.roomId;
           socket.data.user.roomId = "";
           socket.leave(roomId);
-          withDone(done)(createResponse({}, { isSuccess: true }));
-        } else {
-          withDone(done)(createResponse({}, { isSuccess: false }));
         }
+        withDone(done)(createResponse({}, { isSuccess: true }));
       });
 
       socket.on("game_data_updated", (updatedQueue) => {
@@ -368,46 +410,29 @@ class GameSocketService {
             .emit("other_game_data_updated", updatedQueue);
           updatedQueue.forEach(async (item) => {
             if (item.type === "SCORE") {
-              const room = await this.roomManager.getRoom(
-                socket.data.user.roomId
-              );
-              if (!isNil(room)) {
-                Room.updateParticipantScore(room, socket.id, item.data);
-                await this.roomManager.updateRoom(room.id, room);
-              }
+              withRedisError(async () => {
+                const room = await this.roomManager.getRoom(
+                  socket.data.user.roomId
+                );
+                if (!isNil(room)) {
+                  Room.updateParticipantScore(room, socket.id, item.data);
+                  await this.roomManager.updateRoom(room.id, room);
+                }
+              })({ roomId: socket.data.user.roomId });
             }
           });
         }
       });
 
       socket.on("disconnect", async () => {
-        await withBroadcastRoomManagerError(async () => {
+        await withRedisError(async () => {
           const room = await this.roomManager.getRoom(socket.data.user.roomId);
           if (!isNil(room)) {
             Room.removeParticipant(room, socket.id);
             await this.roomManager.updateRoom(room.id, room);
-            if (Room.isRoomEmpty(room)) {
-              if (this.roomTimerManager.hasTimer(room.id)) {
-                const roomTimer = this.roomTimerManager.getTimer(
-                  room.id
-                ) as RoomTimer;
-                roomTimer.clear();
-                this.roomTimerManager.deleteTimer(room.id);
-              }
-              await this.roomManager.deleteRoom(room.id);
-            } else {
-              if (
-                room.state === ROOM_STATE.GAME_START ||
-                room.state === ROOM_STATE.GAME_BEFORE_START
-              ) {
-                Room.updateState(room, ROOM_STATE.GAME_INTERRUPT);
-                await this.roomManager.updateRoom(room.id, room);
-                const roomTimer = this.roomTimerManager.getTimer(room.id);
-                if (!isNil(roomTimer)) {
-                  roomTimer.clear();
-                }
-              }
-            }
+            await withRedisError(async () => {
+              await onLeave(room);
+            })({ roomId: room.id });
           }
         })({ shouldNotify: false });
       });

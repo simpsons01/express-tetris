@@ -59,7 +59,7 @@ class App {
       global.gameSocketInstance = gameSocketInstance;
 
       // router
-      app.use("/health-check", (req, res) => res.status(200));
+      app.use("/health-check", (req, res) => res.status(200).end());
 
       // start app
       const port = env.PORT || 3030;

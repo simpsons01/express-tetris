@@ -16,6 +16,10 @@ export class Participant {
     participant.score += score;
   }
 
+  static notReady(participant: Participant): void {
+    participant.isReady = false;
+  }
+
   static ready(participant: Participant): void {
     participant.isReady = true;
   }
@@ -35,7 +39,10 @@ export enum ROOM_STATE {
 export class Room {
   id: string;
   name: string;
-  host: Participant;
+  host: {
+    name: Participant["name"];
+    id: Participant["id"];
+  };
   state: ROOM_STATE = ROOM_STATE.CREATED;
   participantLimitNum: number;
   participants: Array<Participant> = [];
@@ -48,7 +55,10 @@ export class Room {
   ) {
     this.id = id;
     this.name = name;
-    this.host = host;
+    this.host = {
+      id: host.id,
+      name: host.name,
+    };
     this.participants.push(host);
     this.participantLimitNum = participantLimitNum;
   }
@@ -127,7 +137,17 @@ export class Room {
   }
 
   static isRoomReady(room: Room): boolean {
-    return room.participants.every((participant) => participant.isReady);
+    return (
+      room.participants.length === room.participantLimitNum &&
+      room.participants.every((participant) => participant.isReady)
+    );
+  }
+
+  static reset(room: Room): void {
+    Room.updateState(room, ROOM_STATE.WAITING_ROOM_FULL);
+    room.participants.forEach((participant) =>
+      Participant.notReady(participant)
+    );
   }
 }
 
@@ -236,7 +256,7 @@ export class RoomManager {
   }
 
   async getRoom(roomId: string): Promise<Room | undefined> {
-    const room = await this._getRoom(roomId);
+    const room = await this._getRoom("room:" + roomId);
     return room;
   }
 
@@ -250,14 +270,14 @@ export class RoomManager {
   }
 
   async updateRoom(roomId: string, room: Room): Promise<void> {
-    const isRoomExist = !isNil(await this._getRoom(roomId));
+    const isRoomExist = !isNil(await this._getRoom("room:" + roomId));
     if (isRoomExist) {
-      await this._setRoom(roomId, room);
+      await this._setRoom("room:" + roomId, room);
     }
   }
 
   async deleteRoom(roomId: string): Promise<void> {
-    await this._delRoom(roomId);
-    await this._removeRoomIdSet(roomId);
+    await this._delRoom("room:" + roomId);
+    await this._removeRoomIdSet("room:" + roomId);
   }
 }

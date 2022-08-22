@@ -104,8 +104,8 @@ export class Room {
 
   static getResult(room: Room): {
     isTie: boolean;
-    winner: Participant;
-    loser: Participant;
+    winnerId: string;
+    loserId: string;
   } {
     let winner: Participant = room.participants[0],
       loser: Participant = room.participants[0];
@@ -119,8 +119,8 @@ export class Room {
     }
     return {
       isTie: winner.score === loser.score,
-      winner,
-      loser,
+      winnerId: winner.id,
+      loserId: loser.id,
     };
   }
 

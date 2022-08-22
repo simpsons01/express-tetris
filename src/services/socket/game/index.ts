@@ -1,4 +1,4 @@
-import { delay, logger } from "../../../util";
+import { logger } from "../../../util";
 import { Server as SocketServer } from "socket.io";
 import { RoomManager, ROOM_STATE, Participant, Room } from "./_room";
 import {
@@ -102,47 +102,51 @@ class GameSocketService {
             if (!isNil(roomTimer)) {
               roomTimer.clear();
             }
-            this.io.in(room.id).emit("game_interrupted");
+            this.io.in(room.id).emit("room_participant_leave");
           }
         }
       };
 
-      const onReady = (room: Room) => {
+      const onReady = (roomId: string) => {
         const roomTimer = (() => {
           let _roomTimer: RoomTimer | undefined;
-          _roomTimer = this.roomTimerManager.getTimer(room.id);
+          _roomTimer = this.roomTimerManager.getTimer(roomId);
           if (isNil(_roomTimer)) {
-            _roomTimer = this.roomTimerManager.createTimer(room.id);
+            _roomTimer = this.roomTimerManager.createTimer(roomId);
           }
           return _roomTimer;
         })();
         roomTimer.startBeforeGameStartCountDown(
           DEFAULT_BEFORE_GAME_START_LEFT_SEC,
           (leftSec: number) => {
-            this.io.in(room.id).emit("before_start_game", leftSec);
+            this.io.in(roomId).emit("before_start_game", leftSec);
           },
           () => {
             withRedisError(async () => {
               roomTimer.clearBeforeGameStartCountDown();
+              const room = (await this.roomManager.getRoom(roomId)) as Room;
               Room.updateState(room, ROOM_STATE.GAME_START);
-              await this.roomManager.updateRoom(room.id, room);
-              this.io.in(room.id).emit("game_start");
+              await this.roomManager.updateRoom(roomId, room);
+              this.io.in(roomId).emit("game_start");
               roomTimer.startGameEndCountDown(
                 DEFAULT_GAME_END_LEFT_SEC,
                 (leftSec: number) => {
-                  this.io.in(room.id).emit("game_leftSec", leftSec);
+                  this.io.in(roomId).emit("game_leftSec", leftSec);
                 },
                 () => {
                   withRedisError(async () => {
-                    Room.updateState(room, ROOM_STATE.GAME_END);
-                    await this.roomManager.updateRoom(room.id, room);
+                    const room = (await this.roomManager.getRoom(
+                      roomId
+                    )) as Room;
+                    Room.updateState(room, ROOM_STATE.GAME_START);
+                    await this.roomManager.updateRoom(roomId, room);
                     roomTimer.clearGameEndCountDown();
                     const result = Room.getResult(room);
                     this.io.in(room.id).emit("game_over", result);
                   })({ roomId: room.id });
                 }
               );
-            })({ roomId: room.id });
+            })({ roomId });
           }
         );
       };
@@ -312,7 +316,7 @@ class GameSocketService {
                   Room.updateState(room, ROOM_STATE.GAME_BEFORE_START);
                   await this.roomManager.updateRoom(room.id, room);
                   withDone(done)(createResponse({}, { isSuccess: true }));
-                  onReady(room);
+                  onReady(room.id);
                 } else {
                   await this.roomManager.updateRoom(room.id, room);
                   withDone(done)(createResponse({}, { isSuccess: true }));

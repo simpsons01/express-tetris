@@ -1,5 +1,5 @@
 import { isNil } from "ramda";
-import { handleRedisError, getRedisClient } from "../../redis";
+import { getRedisClient } from "../../redis";
 
 export class Participant {
   id: string;
@@ -153,7 +153,6 @@ export class RoomManager {
       const redis = getRedisClient();
       redis.smembers("rooms", (err, res) => {
         if (err) {
-          handleRedisError(err);
           return reject(err);
         }
         resolve(res);
@@ -166,7 +165,6 @@ export class RoomManager {
       const redis = getRedisClient();
       redis.sadd("rooms", roomId, (err) => {
         if (err) {
-          handleRedisError(err);
           return reject(err);
         }
         resolve();
@@ -179,7 +177,6 @@ export class RoomManager {
       const redis = getRedisClient();
       redis.srem("rooms", roomId, (err) => {
         if (err) {
-          handleRedisError(err);
           return reject(err);
         }
         resolve();
@@ -192,7 +189,6 @@ export class RoomManager {
       const redis = getRedisClient();
       redis.scard("rooms", (err, res) => {
         if (err) {
-          handleRedisError(err);
           return reject(err);
         }
         resolve(res);
@@ -205,7 +201,6 @@ export class RoomManager {
       const redis = getRedisClient();
       redis.get(roomId, (err, res) => {
         if (err) {
-          handleRedisError(err);
           return reject(err);
         }
         resolve(isNil(res) ? res : JSON.parse(res));
@@ -218,7 +213,6 @@ export class RoomManager {
       const redis = getRedisClient();
       redis.set(roomId, JSON.stringify(room), (err) => {
         if (err) {
-          handleRedisError(err);
           return reject(err);
         }
         resolve();
@@ -231,7 +225,6 @@ export class RoomManager {
       const redis = getRedisClient();
       redis.del(roomId, (err) => {
         if (err) {
-          handleRedisError(err);
           return reject(err);
         }
         resolve();

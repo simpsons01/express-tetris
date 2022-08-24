@@ -10,11 +10,17 @@ import {
 import { Server as HttpServer } from "http";
 import { AnyFunction, AnyObject } from "../../../util/types";
 import { isNil, is, isEmpty } from "ramda";
+import { getIsRedisConnectBrokenError } from "../../redis";
 
 // TODO: 創建socket的options不行是AnyObject
-export type SocketServerOptions = AnyObject;
+type SocketServerOptions = AnyObject;
 
-export type SocketResponsePayload = {
+enum ERROR {
+  STORAGE_COMMAND_FAILED,
+  STORAGE_CONNECT_BROKEN,
+}
+
+type SocketResponsePayload = {
   data: AnyObject;
   metadata: {
     message?: string;
@@ -76,14 +82,30 @@ class GameSocketService {
         roomId: "",
       };
 
+      const withRedisError =
+        <Action extends AnyFunction>(action: Action) =>
+        async (...args: Parameters<Action>): Promise<ReturnType<Action>> => {
+          try {
+            const res = await action(...args);
+            return res;
+          } catch (error) {
+            const _error = getIsRedisConnectBrokenError(error)
+              ? ERROR.STORAGE_CONNECT_BROKEN
+              : ERROR.STORAGE_COMMAND_FAILED;
+            socket.emit("error_occur", _error);
+            if (!isEmpty(socket.data.user.roomId)) {
+              this.io.in(socket.data.user.roomId).emit("error_occur", _error);
+            }
+            throw error;
+          }
+        };
+
       const onLeave = async (room: Room) => {
         const isRoomEmpty = Room.isRoomEmpty(room);
         const isHost = room.host.id === socket.id;
         if (isRoomEmpty || isHost) {
           if (this.roomTimerManager.hasTimer(room.id)) {
-            const roomTimer = this.roomTimerManager.getTimer(
-              room.id
-            ) as RoomTimer;
+            const roomTimer = this.roomTimerManager.getTimer(room.id) as RoomTimer;
             roomTimer.clear();
             this.roomTimerManager.deleteTimer(room.id);
           }
@@ -92,10 +114,7 @@ class GameSocketService {
             this.io.in(room.id).emit("room_host_leave");
           }
         } else {
-          if (
-            room.state === ROOM_STATE.GAME_START ||
-            room.state === ROOM_STATE.GAME_BEFORE_START
-          ) {
+          if (room.state === ROOM_STATE.GAME_START || room.state === ROOM_STATE.GAME_BEFORE_START) {
             Room.updateState(room, ROOM_STATE.GAME_INTERRUPT);
             await this.roomManager.updateRoom(room.id, room);
             const roomTimer = this.roomTimerManager.getTimer(room.id);
@@ -107,7 +126,8 @@ class GameSocketService {
         }
       };
 
-      const onReady = (roomId: string) => {
+      const onReady = (room: Room) => {
+        const roomId = room.id;
         const roomTimer = (() => {
           let _roomTimer: RoomTimer | undefined;
           _roomTimer = this.roomTimerManager.getTimer(roomId);
@@ -121,53 +141,41 @@ class GameSocketService {
           (leftSec: number) => {
             this.io.in(roomId).emit("before_start_game", leftSec);
           },
-          () => {
-            withRedisError(async () => {
+          async () => {
+            try {
               roomTimer.clearBeforeGameStartCountDown();
-              const room = (await this.roomManager.getRoom(roomId)) as Room;
+              const room = (await withRedisError(this.roomManager.getRoom.bind(this.roomManager))(
+                roomId
+              )) as Room;
               Room.updateState(room, ROOM_STATE.GAME_START);
-              await this.roomManager.updateRoom(roomId, room);
+              await withRedisError(this.roomManager.updateRoom.bind(this.roomManager))(roomId, room);
               this.io.in(roomId).emit("game_start");
               roomTimer.startGameEndCountDown(
                 DEFAULT_GAME_END_LEFT_SEC,
                 (leftSec: number) => {
                   this.io.in(roomId).emit("game_leftSec", leftSec);
                 },
-                () => {
-                  withRedisError(async () => {
-                    const room = (await this.roomManager.getRoom(
+                async () => {
+                  try {
+                    const room = (await withRedisError(this.roomManager.getRoom.bind(this.roomManager))(
                       roomId
                     )) as Room;
-                    Room.updateState(room, ROOM_STATE.GAME_START);
-                    await this.roomManager.updateRoom(roomId, room);
+                    Room.updateState(room, ROOM_STATE.GAME_END);
+                    await withRedisError(this.roomManager.updateRoom.bind(this.roomManager))(roomId, room);
                     roomTimer.clearGameEndCountDown();
                     const result = Room.getResult(room);
                     this.io.in(room.id).emit("game_over", result);
-                  })({ roomId: room.id });
+                  } catch (error) {
+                    //
+                  }
                 }
               );
-            })({ roomId });
+            } catch (error) {
+              //
+            }
           }
         );
       };
-
-      const withRedisError =
-        (action: AnyFunction, onError?: AnyFunction) =>
-        async ({ roomId = "", shouldNotify = true } = {}): Promise<void> => {
-          try {
-            await action();
-          } catch (error) {
-            console.log(error);
-            if (is(Function, onError)) onError();
-            if (shouldNotify) {
-              if (!isEmpty(roomId)) {
-                this.io.in(roomId).emit("error_occur");
-              } else {
-                socket.emit("error_occur");
-              }
-            }
-          }
-        };
 
       socket.on("get_socket_data", (done) => {
         const { name, roomId } = socket.data.user;
@@ -179,22 +187,14 @@ class GameSocketService {
           const allConnectSocket = await this.io.fetchSockets();
           for (const _socket of allConnectSocket) {
             if (name === _socket.data.user.name) {
-              withDone(done)(
-                createResponse(
-                  {},
-                  { isSuccess: false, message: "DUPLICATE NAME" }
-                )
-              );
+              withDone(done)(createResponse({}, { isSuccess: false, message: "DUPLICATE NAME" }));
             } else {
               if (isNil(socket.request.session.user)) {
                 socket.request.session.user = { name: "" };
               }
               socket.request.session.user.name = name;
               socket.request.session.save(function (err) {
-                if (err)
-                  return withDone(done)(
-                    createResponse({}, { isSuccess: false, isError: true })
-                  );
+                if (err) return withDone(done)(createResponse({}, { isSuccess: false, isError: true }));
 
                 socket.data.user.name = name;
                 withDone(done)(createResponse({}, { isSuccess: true }));
@@ -207,194 +207,141 @@ class GameSocketService {
       });
 
       socket.on("get_rooms", async (done) => {
-        withRedisError(
-          async () => {
-            const rooms = await this.roomManager.getRooms();
-            withDone(done)(createResponse({ rooms }));
-          },
-          () => {
-            withDone(done)(
-              createResponse(
-                { rooms: null },
-                { isSuccess: false, isError: true }
-              )
-            );
-          }
-        )();
+        try {
+          const rooms = await withRedisError(this.roomManager.getRooms.bind(this.roomManager))();
+          withDone(done)(createResponse({ rooms }));
+        } catch (error) {
+          withDone(done)(createResponse({ rooms: null }, { isSuccess: false, isError: true }));
+        }
       });
 
       socket.on("create_room", async (roomName: string, done) => {
-        if (!isEmpty(socket.data.user.name)) {
-          withRedisError(
-            async () => {
-              if (isEmpty(socket.data.user.roomId)) {
-                const participant = new Participant(
-                  socket.data.user.name,
-                  socket.id
-                );
-                const room = await this.roomManager.createRoom(
-                  roomName,
-                  participant
-                );
-                Room.updateState(room, ROOM_STATE.WAITING_ROOM_FULL);
-                await this.roomManager.updateRoom(room.id, room);
-                socket.join(room.id);
-                socket.data.user.roomId = room.id;
-                this.roomTimerManager.createTimer(room.id);
-                withDone(done)(createResponse({ roomId: room.id }));
-              } else {
-                withDone(done)(
-                  createResponse(
-                    { roomId: null },
-                    { isSuccess: false, message: "USER IS IN SOME ROOM" }
-                  )
-                );
-              }
-            },
-            () => {
+        try {
+          if (!isEmpty(socket.data.user.name)) {
+            if (isEmpty(socket.data.user.roomId)) {
+              const participant = new Participant(socket.data.user.name, socket.id);
+              const room = await withRedisError(this.roomManager.createRoom.bind(this.roomManager))(
+                roomName,
+                participant,
+                ROOM_STATE.WAITING_ROOM_FULL
+              );
+              socket.join(room.id);
+              socket.data.user.roomId = room.id;
+              this.roomTimerManager.createTimer(room.id);
+              withDone(done)(createResponse({ roomId: room.id }));
+            } else {
               withDone(done)(
-                createResponse(
-                  { roomId: null },
-                  { isSuccess: false, isError: true }
-                )
+                createResponse({ roomId: null }, { isSuccess: false, message: "ALREADY IN ROOM" })
               );
             }
-          )();
-        } else {
-          createResponse(
-            { roomId: null },
-            { isSuccess: false, message: "NAME REQUIRED" }
-          );
+          } else {
+            withDone(done)(createResponse({ roomId: null }, { isSuccess: false, message: "NAME IS EMPTY" }));
+          }
+        } catch (error) {
+          withDone(done)(createResponse({ roomId: null }, { isSuccess: false, isError: true }));
         }
       });
 
       socket.on("join_room", async (roomId: string, done) => {
-        console.log(
-          "participant is trying to join game! and participant id is  ",
-          socket.id
-        );
-        if (!isEmpty(socket.data.user.name)) {
-          withRedisError(
-            async () => {
-              const room = await this.roomManager.getRoom(roomId);
-              if (!isNil(room)) {
-                const participant = new Participant(
-                  socket.data.user.name,
-                  socket.id
-                );
-                Room.addParticipant(room, participant);
-                await this.roomManager.updateRoom(roomId, room);
-                // join self to room
-                socket.join(roomId);
-                socket.data.user.roomId = roomId;
-                withDone(done)(createResponse({}, { isSuccess: true }));
-              } else {
-                withDone(done)(createResponse({}, { isSuccess: false }));
-              }
-            },
-            () => {
-              withDone(done)(
-                createResponse({}, { isSuccess: false, isError: true })
-              );
+        try {
+          if (!isEmpty(socket.data.user.name)) {
+            const room = await withRedisError(this.roomManager.getRoom.bind(this.roomManager))(roomId);
+            if (!isNil(room)) {
+              const participant = new Participant(socket.data.user.name, socket.id);
+              Room.addParticipant(room, participant);
+              await withRedisError(this.roomManager.updateRoom.bind(this.roomManager))(roomId, room);
+              socket.join(roomId);
+              socket.data.user.roomId = roomId;
+              withDone(done)(createResponse({}, { isSuccess: true }));
+            } else {
+              withDone(done)(createResponse({}, { isSuccess: false, message: "ROOM IS NOT EXIST" }));
             }
-          )();
-        } else {
-          withDone(done)(createResponse({}, { isSuccess: false }));
+          } else {
+            withDone(done)(createResponse({}, { isSuccess: false, message: "NAME IS EMPTY" }));
+          }
+        } catch (error) {
+          withDone(done)(createResponse({}, { isSuccess: false, isError: true }));
         }
       });
 
       socket.on("ready", async (done) => {
-        if (!isEmpty(socket.data.user.roomId)) {
-          withRedisError(
-            async () => {
-              const room = await this.roomManager.getRoom(
-                socket.data.user.roomId
-              );
-              if (!isNil(room)) {
-                Room.updateParticipantReady(room, socket.id);
-                if (Room.isRoomReady(room)) {
-                  Room.updateState(room, ROOM_STATE.GAME_BEFORE_START);
-                  await this.roomManager.updateRoom(room.id, room);
-                  withDone(done)(createResponse({}, { isSuccess: true }));
-                  onReady(room.id);
-                } else {
-                  await this.roomManager.updateRoom(room.id, room);
-                  withDone(done)(createResponse({}, { isSuccess: true }));
-                }
+        try {
+          if (!isEmpty(socket.data.user.roomId)) {
+            const room = await withRedisError(this.roomManager.getRoom.bind(this.roomManager))(
+              socket.data.user.roomId
+            );
+            if (!isNil(room)) {
+              Room.updateParticipantReady(room, socket.id);
+              if (Room.isRoomReady(room)) {
+                Room.updateState(room, ROOM_STATE.GAME_BEFORE_START);
+                await withRedisError(this.roomManager.updateRoom.bind(this.roomManager))(room.id, room);
+                withDone(done)(createResponse({}, { isSuccess: true }));
+                onReady(room);
               } else {
-                withDone(done)(createResponse({}, { isSuccess: false }));
+                await withRedisError(this.roomManager.updateRoom.bind(this.roomManager))(room.id, room);
+                withDone(done)(createResponse({}, { isSuccess: true }));
               }
-            },
-            () => {
-              withDone(done)(
-                createResponse({}, { isSuccess: false, isError: true })
-              );
+            } else {
+              withDone(done)(createResponse({}, { isSuccess: false, message: "ROOM IS NOT EXIST" }));
             }
-          )({ roomId: socket.data.user.roomId });
-        } else {
-          withDone(done)(createResponse({}, { isSuccess: false }));
+          } else {
+            withDone(done)(createResponse({}, { isSuccess: false, message: "IS NOT JOINED ROOM" }));
+          }
+        } catch (error) {
+          withDone(done)(createResponse({}, { isSuccess: false, isError: true }));
         }
       });
 
-      socket.on("leave_room", (done) => {
-        const roomId = socket.data.user.roomId;
-        if (!isEmpty(roomId)) {
-          withRedisError(
-            async () => {
-              const room = await this.roomManager.getRoom(
-                socket.data.user.roomId
-              );
-              if (!isNil(room)) {
-                Room.removeParticipant(room, socket.id);
-                await this.roomManager.updateRoom(room.id, room);
-                socket.leave(room.id);
-                socket.data.user.roomId = "";
-                await onLeave(room);
-                withDone(done)(createResponse({}, { isSuccess: true }));
-              } else {
-                socket.leave(roomId);
-                socket.data.user.roomId = "";
-                withDone(done)(createResponse({}, { isSuccess: true }));
-              }
-            },
-            () => {
-              withDone(done)(
-                createResponse({}, { isSuccess: false, isError: true })
-              );
+      socket.on("leave_room", async (done) => {
+        try {
+          const roomId = socket.data.user.roomId;
+          if (!isEmpty(roomId)) {
+            const room = await withRedisError(this.roomManager.getRoom.bind(this.roomManager))(
+              socket.data.user.roomId
+            );
+            if (!isNil(room)) {
+              Room.removeParticipant(room, socket.id);
+              await withRedisError(this.roomManager.updateRoom.bind(this.roomManager))(room.id, room);
+              socket.leave(room.id);
+              socket.data.user.roomId = "";
+              await withRedisError(onLeave)(room);
+              withDone(done)(createResponse({}, { isSuccess: true }));
+            } else {
+              socket.leave(roomId);
+              socket.data.user.roomId = "";
+              withDone(done)(createResponse({}, { isSuccess: true }));
             }
-          )({ roomId });
-        } else {
-          withDone(done)(createResponse({}, { isSuccess: false }));
+          } else {
+            withDone(done)(createResponse({}, { isSuccess: false, message: "IS NOT JOINED ROOM" }));
+          }
+        } catch (error) {
+          withDone(done)(createResponse({}, { isSuccess: false, isError: true }));
         }
       });
 
-      socket.on("reset_room", (done) => {
-        const roomId = socket.data.user.roomId;
-        if (!isEmpty(roomId)) {
-          withRedisError(
-            async () => {
-              const room = await this.roomManager.getRoom(
-                socket.data.user.roomId
-              );
-              if (!isNil(room)) {
-                if (
-                  room.state === ROOM_STATE.GAME_END ||
-                  room.state === ROOM_STATE.GAME_INTERRUPT
-                ) {
-                  Room.reset(room);
-                  await this.roomManager.updateRoom(room.id, room);
-                }
-                withDone(done)(createResponse({}, { isSuccess: true }));
+      socket.on("reset_room", async (done) => {
+        try {
+          const roomId = socket.data.user.roomId;
+          if (!isEmpty(roomId)) {
+            const room = await withRedisError(this.roomManager.getRoom.bind(this.roomManager))(
+              socket.data.user.roomId
+            );
+            if (!isNil(room)) {
+              if (room.state === ROOM_STATE.GAME_END || room.state === ROOM_STATE.GAME_INTERRUPT) {
+                Room.reset(room);
+                await withRedisError(this.roomManager.updateRoom.bind(this.roomManager))(room.id, room);
               }
-            },
-            () => {
-              withDone(done)(
-                createResponse({}, { isSuccess: false, isError: true })
-              );
+              withDone(done)(createResponse({}, { isSuccess: true }));
+            } else {
+              socket.leave(roomId);
+              socket.data.user.roomId = "";
+              withDone(done)(createResponse({}, { isSuccess: true }));
             }
-          )({ roomId });
-        } else {
-          withDone(done)(createResponse({}, { isSuccess: false }));
+          } else {
+            withDone(done)(createResponse({}, { isSuccess: false, message: "IS NOT JOINED ROOM" }));
+          }
+        } catch (error) {
+          withDone(done)(createResponse({}, { isSuccess: false, isError: true }));
         }
       });
 
@@ -408,37 +355,40 @@ class GameSocketService {
       });
 
       socket.on("game_data_updated", (updatedQueue) => {
-        if (socket.data.user.roomId) {
-          socket
-            .to(socket.data.user.roomId)
-            .emit("other_game_data_updated", updatedQueue);
-          updatedQueue.forEach(async (item) => {
-            if (item.type === "SCORE") {
-              withRedisError(async () => {
-                const room = await this.roomManager.getRoom(
+        if (!isEmpty(socket.data.user.roomId)) {
+          try {
+            socket.to(socket.data.user.roomId).emit("other_game_data_updated", updatedQueue);
+            updatedQueue.forEach(async (item) => {
+              if (item.type === "SCORE") {
+                const room = await withRedisError(this.roomManager.getRoom.bind(this.roomManager))(
                   socket.data.user.roomId
                 );
                 if (!isNil(room)) {
                   Room.updateParticipantScore(room, socket.id, item.data);
-                  await this.roomManager.updateRoom(room.id, room);
+                  await withRedisError(this.roomManager.updateRoom.bind(this.roomManager))(room.id, room);
                 }
-              })({ roomId: socket.data.user.roomId });
-            }
-          });
+              }
+            });
+          } catch (error) {
+            //
+          }
         }
       });
 
       socket.on("disconnect", async () => {
-        await withRedisError(async () => {
-          const room = await this.roomManager.getRoom(socket.data.user.roomId);
-          if (!isNil(room)) {
-            Room.removeParticipant(room, socket.id);
-            await this.roomManager.updateRoom(room.id, room);
-            await withRedisError(async () => {
-              await onLeave(room);
-            })({ roomId: room.id });
+        try {
+          if (!isEmpty(socket.data.user.roomId)) {
+            const room = await withRedisError(this.roomManager.getRoom.bind(this.roomManager))(
+              socket.data.user.roomId
+            );
+            if (!isNil(room)) {
+              Room.removeParticipant(room, socket.id);
+              await withRedisError(onLeave)(room);
+            }
           }
-        })({ shouldNotify: false });
+        } catch (error) {
+          //
+        }
       });
     });
   }
@@ -447,10 +397,7 @@ class GameSocketService {
 let gameSocketInstance: GameSocketService | undefined;
 
 export default {
-  initialize(
-    httpServer: HttpServer,
-    options: SocketServerOptions
-  ): GameSocketService {
+  initialize(httpServer: HttpServer, options: SocketServerOptions): GameSocketService {
     if (gameSocketInstance === undefined) {
       gameSocketInstance = new GameSocketService(httpServer, options);
     } else {

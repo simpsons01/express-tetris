@@ -1,5 +1,5 @@
 import env from "../../env";
-import { createClient, RedisClient } from "redis";
+import { createClient, RedisClient, RedisError, AbortError } from "redis";
 import { isNil } from "ramda";
 import { logger } from "../../util";
 
@@ -11,6 +11,18 @@ export enum ERROR_CODE {
   CONNECT_BROKEN = "CONNECTION_BROKEN",
 }
 
+export const getIsRedisConnectBrokenError = (error: unknown): boolean => {
+  return (
+    error instanceof RedisError &&
+    error instanceof AbortError &&
+    (error.code === ERROR_CODE.CONNECT_BROKEN || error.code === ERROR_CODE.CONNECT_DROP)
+  );
+};
+
+export const handleRedisError = (err: Error): void => {
+  logger.error(err);
+};
+
 export const getRedisClient = (): RedisClient => {
   if (isNil(redisClient)) {
     redisClient = createClient({
@@ -18,8 +30,4 @@ export const getRedisClient = (): RedisClient => {
     });
   }
   return redisClient;
-};
-
-export const handleRedisError = (err: Error): void => {
-  logger.error(err);
 };

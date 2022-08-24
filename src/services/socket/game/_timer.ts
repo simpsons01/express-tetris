@@ -15,11 +15,7 @@ export class RoomTimer {
     onCountDown?: (leftSec: number) => void,
     onComplete?: (...args: Array<unknown>) => void
   ): void {
-    this.beforeGameStartCountDownCleanHandler = createCountdown(
-      leftSec,
-      onCountDown,
-      onComplete
-    );
+    this.beforeGameStartCountDownCleanHandler = createCountdown(leftSec, onCountDown, onComplete);
   }
 
   clearBeforeGameStartCountDown(): void {
@@ -34,11 +30,7 @@ export class RoomTimer {
     onCountDown?: (leftSec: number) => void,
     onComplete?: (...args: Array<unknown>) => void
   ): void {
-    this.endCountDownCleanHandler = createCountdown(
-      leftSec,
-      onCountDown,
-      onComplete
-    );
+    this.endCountDownCleanHandler = createCountdown(leftSec, onCountDown, onComplete);
   }
 
   clearGameEndCountDown(): void {

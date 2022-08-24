@@ -47,11 +47,7 @@ class App {
         },
       });
       gameSocketInstance.io.use((socket, next) => {
-        sessionMiddleware(
-          socket.request as Request,
-          {} as Response,
-          next as NextFunction
-        );
+        sessionMiddleware(socket.request as Request, {} as Response, next as NextFunction);
       });
       gameSocketInstance.io.adapter(createAdapter(pubClient, subClient));
       gameSocketInstance.listen();

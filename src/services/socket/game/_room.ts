@@ -51,7 +51,8 @@ export class Room {
     id: string,
     name: string,
     host: Participant,
-    participantLimitNum: number
+    participantLimitNum: number,
+    initialState?: ROOM_STATE
   ) {
     this.id = id;
     this.name = name;
@@ -61,6 +62,9 @@ export class Room {
     };
     this.participants.push(host);
     this.participantLimitNum = participantLimitNum;
+    if (!isNil(initialState)) {
+      this.state = initialState;
+    }
   }
 
   static addParticipant(room: Room, participant: Participant): void {
@@ -70,19 +74,13 @@ export class Room {
   }
 
   static removeParticipant(room: Room, participantId: string): void {
-    const index = room.participants.findIndex(
-      (participant) => participant.id === participantId
-    );
+    const index = room.participants.findIndex((participant) => participant.id === participantId);
     if (index > -1) {
       room.participants.splice(index, 1);
     }
   }
 
-  static updateParticipantScore(
-    room: Room,
-    participantId: string,
-    score: number
-  ): void {
+  static updateParticipantScore(room: Room, participantId: string, score: number): void {
     room.participants.forEach((participant) => {
       if (participant.id === participantId) {
         Participant.updateScore(participant, score);
@@ -145,14 +143,12 @@ export class Room {
 
   static reset(room: Room): void {
     Room.updateState(room, ROOM_STATE.WAITING_ROOM_FULL);
-    room.participants.forEach((participant) =>
-      Participant.notReady(participant)
-    );
+    room.participants.forEach((participant) => Participant.notReady(participant));
   }
 }
 
 export class RoomManager {
-  private async _getRoomIdSet(): Promise<Array<string> | undefined> {
+  private async _getRoomIdSet(): Promise<Array<string> | null> {
     return new Promise((resolve, reject) => {
       const redis = getRedisClient();
       redis.smembers("rooms", (err, res) => {
@@ -191,7 +187,7 @@ export class RoomManager {
     });
   }
 
-  private async _getRoomNum(): Promise<number | undefined> {
+  private async _getRoomNum(): Promise<number | null> {
     return new Promise((resolve, reject) => {
       const redis = getRedisClient();
       redis.scard("rooms", (err, res) => {
@@ -204,7 +200,7 @@ export class RoomManager {
     });
   }
 
-  private async _getRoom(roomId: string): Promise<Room | undefined> {
+  private async _getRoom(roomId: string): Promise<Room | null> {
     return new Promise((resolve, reject) => {
       const redis = getRedisClient();
       redis.get(roomId, (err, res) => {
@@ -243,7 +239,7 @@ export class RoomManager {
     });
   }
 
-  async getRooms(): Promise<Array<Room | undefined> | undefined> {
+  async getRooms(): Promise<Array<Room | null> | null> {
     const rooms = [];
     const roomIdSet = (await this._getRoomIdSet()) ?? [];
     for (const roomId of roomIdSet) {
@@ -255,15 +251,15 @@ export class RoomManager {
     return rooms;
   }
 
-  async getRoom(roomId: string): Promise<Room | undefined> {
+  async getRoom(roomId: string): Promise<Room | null> {
     const room = await this._getRoom("room:" + roomId);
     return room;
   }
 
-  async createRoom(name: string, host: Participant): Promise<Room> {
+  async createRoom(name: string, host: Participant, state?: ROOM_STATE): Promise<Room> {
     const roomNum = (await this._getRoomNum()) ?? 0;
     const roomId = `${roomNum + 1}`;
-    const room = new Room(roomId, name, host, DEFAULT_ROOM_PARTICIPANT_NUM);
+    const room = new Room(roomId, name, host, DEFAULT_ROOM_PARTICIPANT_NUM, state);
     await this._setRoom("room:" + roomId, room);
     await this._setRoomIdSet("room:" + roomId);
     return room;

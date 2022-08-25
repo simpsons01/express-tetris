@@ -95,6 +95,8 @@ class GameSocketService {
             socket.emit("error_occur", _error);
             if (!isEmpty(socket.data.user.roomId)) {
               this.io.in(socket.data.user.roomId).emit("error_occur", _error);
+              socket.leave(socket.data.user.roomId);
+              socket.data.user.roomId = "";
             }
             throw error;
           }
@@ -202,7 +204,7 @@ class GameSocketService {
             }
           }
         } else {
-          withDone(done)(createResponse({}, { isSuccess: false }));
+          withDone(done)(createResponse({}, { isSuccess: false, message: "ALREADY HAS NAME" }));
         }
       });
 
@@ -354,21 +356,20 @@ class GameSocketService {
         withDone(done)(createResponse({}, { isSuccess: true }));
       });
 
-      socket.on("game_data_updated", (updatedQueue) => {
+      socket.on("game_data_updated", async (updatedQueue) => {
         if (!isEmpty(socket.data.user.roomId)) {
           try {
             socket.to(socket.data.user.roomId).emit("other_game_data_updated", updatedQueue);
-            updatedQueue.forEach(async (item) => {
-              if (item.type === "SCORE") {
-                const room = await withRedisError(this.roomManager.getRoom.bind(this.roomManager))(
-                  socket.data.user.roomId
-                );
-                if (!isNil(room)) {
-                  Room.updateParticipantScore(room, socket.id, item.data);
-                  await withRedisError(this.roomManager.updateRoom.bind(this.roomManager))(room.id, room);
-                }
+            const scoreItem = updatedQueue.find((item) => item.type === "SCORE");
+            if (!isNil(scoreItem)) {
+              const room = await withRedisError(this.roomManager.getRoom.bind(this.roomManager))(
+                socket.data.user.roomId
+              );
+              if (!isNil(room)) {
+                Room.updateParticipantScore(room, socket.id, scoreItem.data);
+                await withRedisError(this.roomManager.updateRoom.bind(this.roomManager))(room.id, room);
               }
-            });
+            }
           } catch (error) {
             //
           }

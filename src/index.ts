@@ -51,9 +51,6 @@ class App {
       });
       gameSocketInstance.io.adapter(createAdapter(pubClient, subClient));
       gameSocketInstance.listen();
-      // @ts-ignore
-      global.gameSocketInstance = gameSocketInstance;
-
       // router
       app.use("/health-check", (req, res) => res.status(200).end());
 

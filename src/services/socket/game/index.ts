@@ -15,11 +15,6 @@ import { getIsRedisConnectBrokenError } from "../../redis";
 // TODO: 創建socket的options不行是AnyObject
 type SocketServerOptions = AnyObject;
 
-enum ERROR {
-  STORAGE_COMMAND_FAILED,
-  STORAGE_CONNECT_BROKEN,
-}
-
 type SocketResponsePayload = {
   data: AnyObject;
   metadata: {
@@ -89,14 +84,13 @@ class GameSocketService {
             const res = await action(...args);
             return res;
           } catch (error) {
-            const _error = getIsRedisConnectBrokenError(error)
-              ? ERROR.STORAGE_CONNECT_BROKEN
-              : ERROR.STORAGE_COMMAND_FAILED;
-            socket.emit("error_occur", _error);
-            if (!isEmpty(socket.data.user.roomId)) {
-              this.io.in(socket.data.user.roomId).emit("error_occur", _error);
-              socket.leave(socket.data.user.roomId);
-              socket.data.user.roomId = "";
+            if (!getIsRedisConnectBrokenError(error)) {
+              socket.emit("error_occur");
+              if (!isEmpty(socket.data.user.roomId)) {
+                this.io.in(socket.data.user.roomId).emit("error_occur");
+                socket.leave(socket.data.user.roomId);
+                socket.data.user.roomId = "";
+              }
             }
             throw error;
           }
@@ -356,17 +350,17 @@ class GameSocketService {
         withDone(done)(createResponse({}, { isSuccess: true }));
       });
 
-      socket.on("game_data_updated", async (updatedQueue) => {
+      socket.on("game_data_updated", async (updatedPayloads) => {
         if (!isEmpty(socket.data.user.roomId)) {
           try {
-            socket.to(socket.data.user.roomId).emit("other_game_data_updated", updatedQueue);
-            const scoreItem = updatedQueue.find((item) => item.type === "SCORE");
-            if (!isNil(scoreItem)) {
+            socket.to(socket.data.user.roomId).emit("other_game_data_updated", updatedPayloads);
+            const scorePayload = updatedPayloads.find((payload) => payload.type === "SCORE");
+            if (!isNil(scorePayload)) {
               const room = await withRedisError(this.roomManager.getRoom.bind(this.roomManager))(
                 socket.data.user.roomId
               );
               if (!isNil(room)) {
-                Room.updateParticipantScore(room, socket.id, scoreItem.data);
+                Room.updateParticipantScore(room, socket.id, scorePayload.data);
                 await withRedisError(this.roomManager.updateRoom.bind(this.roomManager))(room.id, room);
               }
             }

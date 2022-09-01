@@ -17,6 +17,9 @@ class App {
       const pubClient = getRedisClient();
       const subClient = pubClient.duplicate();
 
+      pubClient.on("error", (error) => error);
+      subClient.on("error", (error) => error);
+
       // initialize
       const app = express();
       const httpServer = http.createServer(app);
@@ -52,7 +55,7 @@ class App {
       gameSocketInstance.io.adapter(createAdapter(pubClient, subClient));
       gameSocketInstance.listen();
       // router
-      app.use("/health-check", (req, res) => res.status(200).end());
+      app.get("/health-check", (req, res) => res.status(200).end());
 
       // start app
       const port = env.PORT || 3030;

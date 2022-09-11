@@ -55,12 +55,14 @@ class App {
       gameSocketInstance.io.adapter(createAdapter(pubClient, subClient));
       gameSocketInstance.listen();
       // router
-      app.get("/health-check", (req, res) => res.status(200).end());
+      app.get("/health-check", (req, res) => {
+        res.status(200).send("server is running ok");
+      });
 
       // start app
       const port = env.PORT || 3030;
       httpServer.listen(port, () => {
-        console.log(`Server is running at https://localhost:${port}`);
+        console.log(`Server is running at http://localhost:${port}`);
       });
     } catch (error) {
       logger.error(error);

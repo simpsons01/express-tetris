@@ -1,23 +1,27 @@
-FROM node:16.7.0
-
-ENV PORT=8181
-
-EXPOSE ${PORT}
+FROM node:16-alpine AS BUILD
 
 WORKDIR /app/
 
 COPY package.json .
 
-RUN npm install
+RUN npm install --production
 
 COPY . .
 
 RUN npm run build
 
-ADD https://github.com/krallin/tini/releases/download/v0.19.0/tini /tini
+FROM node:16-alpine
 
-RUN chmod +x /tini
+WORKDIR /app/
 
-ENTRYPOINT ["/tini", "--"]
+ENV PORT=8181
+
+EXPOSE ${PORT}
+
+COPY --from=BUILD /app/dist /app/dist/
+
+COPY --from=BUILD /app/node_modules /app/node_modules
+
+COPY . .
 
 CMD ["npm", "run", "start"]  

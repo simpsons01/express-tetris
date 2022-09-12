@@ -1,4 +1,3 @@
-import { logger } from "../../../util";
 import { Server as SocketServer } from "socket.io";
 import { RoomManager, ROOM_STATE, Participant, Room } from "./_room";
 import {
@@ -396,13 +395,13 @@ export default {
     if (gameSocketInstance === undefined) {
       gameSocketInstance = new GameSocketService(httpServer, options);
     } else {
-      logger.warn("tetris game socket service is initialized");
+      console.warn("tetris game socket service is initialized");
     }
     return gameSocketInstance;
   },
   getInstance(): GameSocketService | undefined {
     if (gameSocketInstance === undefined) {
-      logger.warn("tetris game socket service is not initialized");
+      console.warn("tetris game socket service is not initialized");
     }
     return gameSocketInstance;
   },

@@ -21,7 +21,7 @@ export const getIsRedisConnectBrokenError = (error: unknown): boolean => {
 export const getRedisClient = (): RedisClient => {
   if (isNil(redisClient)) {
     redisClient = createClient({
-      url: `redis://${env.REDIS_HOST_URL}:${env.REDIS_HOST_PORT}`,
+      url: `${env.REDIS_HOST_URL}:${env.REDIS_HOST_PORT}`,
     });
   }
   return redisClient;

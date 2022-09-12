@@ -5,7 +5,7 @@ import bodyParser from "body-parser";
 import gameSocket from "./services/socket/game/index";
 import session from "express-session";
 import env from "./env";
-import { isDev, logger } from "./util/index";
+import { isDev } from "./util/index";
 import { getRedisClient } from "./services/redis";
 import CreateRedisStore from "connect-redis";
 import { createAdapter } from "@socket.io/redis-adapter";
@@ -17,8 +17,12 @@ class App {
       const pubClient = getRedisClient();
       const subClient = pubClient.duplicate();
 
-      pubClient.on("error", (error) => error);
-      subClient.on("error", (error) => error);
+      pubClient.on("error", (error) => {
+        console.log(error);
+      });
+      subClient.on("error", (error) => {
+        console.log(error);
+      });
 
       // initialize
       const app = express();
@@ -56,7 +60,7 @@ class App {
       gameSocketInstance.listen();
       // router
       app.get("/health-check", (req, res) => {
-        res.status(200).send("server is running ok");
+        res.status(200).end();
       });
 
       // start app
@@ -65,7 +69,6 @@ class App {
         console.log(`Server is running at http://localhost:${port}`);
       });
     } catch (error) {
-      logger.error(error);
       process.exit(1);
     }
   }

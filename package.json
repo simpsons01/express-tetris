@@ -21,7 +21,8 @@
     "ramda": "^0.28.0",
     "redis": "^3.1.2",
     "socket.io": "^4.5.1",
-    "uuid": "^8.3.2"
+    "uuid": "^8.3.2",
+    "cross-env": "^7.0.3"
   },
   "devDependencies": {
     "@types/connect-redis": "^0.0.18",
@@ -34,7 +35,6 @@
     "@typescript-eslint/eslint-plugin": "^5.30.6",
     "@typescript-eslint/parser": "^5.30.6",
     "concurrently": "^7.2.2",
-    "cross-env": "^7.0.3",
     "eslint": "^8.19.0",
     "eslint-config-prettier": "^8.5.0",
     "eslint-plugin-prettier": "^4.2.1",

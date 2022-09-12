@@ -4,7 +4,7 @@ WORKDIR /app/
 
 COPY package.json .
 
-RUN npm install --production
+RUN npm install
 
 COPY . .
 
@@ -20,7 +20,9 @@ EXPOSE ${PORT}
 
 COPY --from=BUILD /app/dist /app/dist/
 
-COPY --from=BUILD /app/node_modules /app/node_modules
+COPY package.json .
+
+RUN npm install --production
 
 COPY . .
 

@@ -46,6 +46,10 @@ class App {
       app.use(bodyParser.json());
       app.use(bodyParser.urlencoded({ extended: false }));
 
+      if (env.NODE_ENV === "production") {
+        app.set("trust proxy", "loopback");
+      }
+
       // initialize socket.io
       const gameSocketInstance = gameSocket.initialize(httpServer, {
         cors: {
@@ -69,6 +73,7 @@ class App {
         console.log(`Server is running at http://localhost:${port}`);
       });
     } catch (error) {
+      console.log(error);
       process.exit(1);
     }
   }

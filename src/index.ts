@@ -31,6 +31,7 @@ class App {
         store: new RedisStore({ client: pubClient }),
         secret: env.SESSION_SECRET as string,
         cookie: {
+          domain: env.DOMAIN as string,
           secure: !isDev(),
         },
       });
@@ -45,11 +46,6 @@ class App {
       app.use(sessionMiddleware);
       app.use(bodyParser.json());
       app.use(bodyParser.urlencoded({ extended: false }));
-
-      if (env.NODE_ENV === "production") {
-        app.set("trust proxy", "loopback");
-      }
-
       // initialize socket.io
       const gameSocketInstance = gameSocket.initialize(httpServer, {
         cors: {

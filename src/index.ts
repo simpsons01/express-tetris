@@ -27,16 +27,17 @@ class App {
       // initialize
       const app = express();
       const httpServer = http.createServer(app);
+      if (!isDev()) app.set("trust proxy", true);
+      // setup global middleware
       const sessionMiddleware = session({
         store: new RedisStore({ client: pubClient }),
         secret: env.SESSION_SECRET as string,
         cookie: {
+          sameSite: "lax",
           domain: env.DOMAIN as string,
           secure: !isDev(),
         },
       });
-
-      // setup global middleware
       app.use(
         cors({
           origin: env.ALLOW_ORIGIN,

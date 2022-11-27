@@ -3,17 +3,14 @@ import cors from "cors";
 import express, { Request, Response, NextFunction } from "express";
 import bodyParser from "body-parser";
 import gameSocket from "./services/socket/game/index";
-import session from "express-session";
 import env from "./env";
 import { isDev } from "./util/index";
 import { getRedisClient } from "./services/redis";
-import CreateRedisStore from "connect-redis";
 import { createAdapter } from "@socket.io/redis-adapter";
 
 class App {
   async run() {
     try {
-      const RedisStore = CreateRedisStore(session);
       const pubClient = getRedisClient();
       const subClient = pubClient.duplicate();
 
@@ -28,23 +25,12 @@ class App {
       const app = express();
       const httpServer = http.createServer(app);
       if (!isDev()) app.set("trust proxy", true);
-      // setup global middleware
-      const sessionMiddleware = session({
-        store: new RedisStore({ client: pubClient }),
-        secret: env.SESSION_SECRET as string,
-        cookie: {
-          sameSite: "lax",
-          domain: env.DOMAIN as string,
-          secure: !isDev(),
-        },
-      });
       app.use(
         cors({
           origin: env.ALLOW_ORIGIN,
           credentials: true,
         })
       );
-      app.use(sessionMiddleware);
       app.use(bodyParser.json());
       app.use(bodyParser.urlencoded({ extended: false }));
       // initialize socket.io
@@ -54,15 +40,10 @@ class App {
           credentials: true,
         },
       });
-      gameSocketInstance.io.use((socket, next) => {
-        sessionMiddleware(socket.request as Request, {} as Response, next as NextFunction);
-      });
       gameSocketInstance.io.adapter(createAdapter(pubClient, subClient));
       gameSocketInstance.listen();
       // router
-      app.get("/health-check", (req, res) => {
-        res.status(200).end();
-      });
+      app.get("/health-check", (req, res) => res.status(200).end());
 
       // start app
       const port = env.PORT || 3030;

@@ -1,15 +1,24 @@
 version: "3.9"
 
 services:
-  web:
+  api:
     build:
-      context: .
+      context: ./api
       dockerfile: Dockerfile.developnment
     volumes:
-      - .:/app
+      - ./api:/app
       - /app/node_modules/
     ports:
-      - "9229:9229"
+      - "3131:3131"
+  connect:
+    build:
+      context: ./connect
+      dockerfile: Dockerfile.developnment
+    volumes:
+      - ./connect:/app
+      - /app/node_modules/
+    ports:
+      - "3030:3030"
   proxy:
     build:
       context: ./.nginx
@@ -17,7 +26,7 @@ services:
     depends_on:
       - web
     ports:
-      - "3030:8080"
+      - "3333:8080"
   redis:
     build:
       context: ./.redis

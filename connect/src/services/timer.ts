@@ -1,6 +1,6 @@
 import { isNil } from "ramda";
-import { createCountdown } from "../../../util";
-import { AnyFunction } from "../../../util/types";
+import { createCountdown } from "../util";
+import { AnyFunction } from "../util/types";
 
 export const DEFAULT_BEFORE_GAME_START_LEFT_SEC = 3;
 

@@ -26,8 +26,9 @@ export const getPlayer = async (
 
 export const createPlayer = async (player: IPlayer) => {
   const redis = getRedisClient();
-  await redis.set(`player:${player.id}`, JSON.stringify(player), {
-    EXAT: Date.now() + 1000 * 60 * 60 * 24 * 7,
+  const playerNameHex = toHex(player.name);
+  await redis.set(`player:${playerNameHex}`, JSON.stringify(player), {
+    EX: 30,
   });
 };
 

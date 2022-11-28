@@ -4,10 +4,7 @@ import jwt from "jsonwebtoken";
 
 const secret = env.JWT_SECRET as string;
 
-export const signToken = (
-  { name, id }: IPlayer,
-  expiresIn: number | string = "7d"
-) => {
-  const token = jwt.sign({ name, id }, secret, { expiresIn });
+export const signToken = ({ name, id }: IPlayer) => {
+  const token = jwt.sign({ name, id }, secret, { expiresIn: 30 });
   return token;
 };

@@ -12,3 +12,11 @@ export const delay = (delay: number): Promise<void> => {
 
 export const isPlainObject = (val: any) =>
   !isNil(val) && Object.prototype.toString.call(val) === "[object Object]";
+
+export const toHex = (val: string) => {
+  let string = "";
+  for (let i = 0; i < val.length; i++) {
+    string += val.charCodeAt(i).toString(16);
+  }
+  return string;
+};

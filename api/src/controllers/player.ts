@@ -12,23 +12,18 @@ export const createPlayer = async (
   next: NextFunction
 ) => {
   const { name } = req.body;
-  const players = await playerService.getPlayers();
-  for (const player of players) {
-    if (!isNil(player) && player.name === name) {
-      return next(
-        createErrorResponse(
-          HTTP_STATUS_CODES.BAD_REQUEST,
-          "player name is exist"
-        )
-      );
-    }
+  const player = await playerService.getPlayer(name);
+  if (!isNil(player)) {
+    return next(
+      createErrorResponse(HTTP_STATUS_CODES.BAD_REQUEST, "player name is exist")
+    );
   }
   const playerId = crypto.randomUUID();
-  const player = {
+  const newPlayer = {
     id: playerId,
     name,
   };
-  const token = signToken(player);
-  await playerService.createPlayer(player);
+  await playerService.createPlayer(newPlayer);
+  const token = signToken(newPlayer, Date.now() + 1000 * 60 * 60 * 24 * 7);
   res.status(HTTP_STATUS_CODES.OK).json({ player: { id: playerId }, token });
 };

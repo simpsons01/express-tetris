@@ -1,5 +1,5 @@
 import { isNil } from "ramda";
-import { getRedisClient } from "./redis";
+import { getRedisClient } from "../redis";
 
 export class Participant {
   id: string;

@@ -1,4 +1,4 @@
-import env from "../env";
+import env from "./env";
 import { createClient, RedisClient } from "redis";
 import { isNil } from "ramda";
 

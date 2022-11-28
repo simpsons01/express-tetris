@@ -1,7 +1,7 @@
 version: "3.9"
 
 services:
-  api:
+  api-service:
     build:
       context: ./api
       dockerfile: Dockerfile.developnment
@@ -10,7 +10,7 @@ services:
       - /app/node_modules/
     ports:
       - "3131:3131"
-  connect:
+  connect-service:
     build:
       context: ./connect
       dockerfile: Dockerfile.developnment
@@ -24,7 +24,8 @@ services:
       context: ./.nginx
       dockerfile: Dockerfile.developnment
     depends_on:
-      - web
+      - api-service
+      - connect-service
     ports:
       - "3333:8080"
   redis:

@@ -11,6 +11,7 @@ import passport from "passport";
 import JwtStrategy from "./config/passport/JwtStrategy";
 import roomRoute from "./routes/room";
 import playerRoute from "./routes/player";
+import authMiddleware from "./middlewares/auth";
 
 const run = async () => {
   try {
@@ -25,6 +26,9 @@ const run = async () => {
     passport.use(JwtStrategy);
 
     app.get("/health-check", (req, res) => res.status(200).end());
+    app.get("/auth-check", authMiddleware, (req, res) =>
+      res.status(HTTP_STATUS_CODES.OK).send()
+    );
     app.use("/room", roomRoute);
     app.use("/player", playerRoute);
     app.use((req: Request, res: Response, next: NextFunction) =>

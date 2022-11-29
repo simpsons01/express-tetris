@@ -11,6 +11,10 @@ import {
 
 const router = Router();
 
+router.get("/list", authMiddleware, catchAsyncError(roomController.getRooms));
+
+router.get("/:id", authMiddleware, catchAsyncError(roomController.getRoom));
+
 router.post(
   "/create",
   authMiddleware,

@@ -6,6 +6,26 @@ import crypto from "crypto";
 import { isEmpty, isNil } from "ramda";
 import { IPlayer } from "../services/player";
 
+export const getRooms = async (req: Request, res: Response) => {
+  const rooms = await roomService.getRooms();
+  res.status(HTTP_STATUS_CODES.OK).json({ list: rooms });
+};
+
+export const getRoom = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+) => {
+  const room = await roomService.getRoom(req.params.id);
+  if (isNil(room)) {
+    next(
+      createErrorResponse(HTTP_STATUS_CODES.NOT_FOUND, "room does not exist")
+    );
+  } else {
+    res.status(HTTP_STATUS_CODES.OK).json({ ...room });
+  }
+};
+
 export const createRoom = async (
   req: Request,
   res: Response,

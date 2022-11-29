@@ -16,7 +16,7 @@ interface IRoom {
   name: string;
   hostId: string;
   playerLimitNum: number;
-  initialState: ROOM_STATE;
+  state: ROOM_STATE;
   players: Array<IPlayer>;
 }
 
@@ -32,7 +32,7 @@ export const createRoomObject = (
   name,
   hostId,
   playerLimitNum,
-  initialState,
+  state: initialState,
   players,
 });
 
@@ -56,7 +56,7 @@ export const getRoom = async (roomId: string): Promise<IRoom | null> => {
   }
 };
 
-export const getRooms = async (): Promise<Array<IRoom | null>> => {
+export const getRooms = async (): Promise<Array<IRoom>> => {
   const rooms = [];
   const roomIds = await getRoomIds();
   for (const roomId of roomIds) {

@@ -13,7 +13,7 @@ const strategy = new Strategy(
       return done(null, false);
     }
     try {
-      const player = await playerService.getPlayer(payload.id);
+      const player = await playerService.getPlayer(payload.name);
       if (!isNil(player)) {
         done(null, player);
       } else {

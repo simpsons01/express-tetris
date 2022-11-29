@@ -28,7 +28,7 @@ export const createPlayer = async (player: IPlayer) => {
   const redis = getRedisClient();
   const playerNameHex = toHex(player.name);
   await redis.set(`player:${playerNameHex}`, JSON.stringify(player), {
-    EX: 30,
+    EX: 60 * 60,
   });
 };
 

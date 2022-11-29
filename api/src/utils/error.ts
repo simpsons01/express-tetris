@@ -3,7 +3,7 @@ import { isNil } from "ramda";
 import { HTTP_STATUS_CODES } from "./httpStatus";
 import { Response, Request, NextFunction } from "express";
 
-export interface ErrorResponse {
+interface IErrorResponse {
   status: HTTP_STATUS_CODES;
   data: {
     message: string;
@@ -11,19 +11,32 @@ export interface ErrorResponse {
   };
 }
 
+class ErrorResponse implements IErrorResponse {
+  status: HTTP_STATUS_CODES;
+  data: IErrorResponse["data"];
+  constructor(
+    status: HTTP_STATUS_CODES,
+    { message, errorCode }: IErrorResponse["data"]
+  ) {
+    this.status = status;
+    this.data = {
+      message,
+      ...(errorCode ? { errorCode } : {}),
+    };
+  }
+}
+
+export const isErrorResponse = (err: any) => err instanceof ErrorResponse;
+
 export const createErrorResponse = (
   status: HTTP_STATUS_CODES = HTTP_STATUS_CODES.INTERNAL_SERVER_ERROR,
   message?: string,
   errorCode?: string
-): ErrorResponse => {
+): IErrorResponse => {
   if (isNil(message)) message = httpStatus[status];
-  return {
-    status,
-    data: {
-      message,
-      ...(errorCode ? { errorCode } : {}),
-    },
-  };
+  const error = new ErrorResponse(status, { message, errorCode });
+  Error.captureStackTrace(error, createErrorResponse);
+  return error;
 };
 
 export const catchAsyncError =

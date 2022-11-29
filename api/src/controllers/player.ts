@@ -25,5 +25,5 @@ export const createPlayer = async (
   };
   await playerService.createPlayer(newPlayer);
   const token = signToken(newPlayer);
-  res.status(HTTP_STATUS_CODES.OK).json({ player: { id: playerId }, token });
+  res.status(HTTP_STATUS_CODES.OK).json({ playerId, token });
 };

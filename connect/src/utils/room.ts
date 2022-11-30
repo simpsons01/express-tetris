@@ -25,6 +25,7 @@ export interface IRoom {
   addPlayer(player: IPlayer): void;
   removePlayer(playerId: string): void;
   updatePlayerScore(playerId: string, score: number): void;
+  updatePlayerToReady(playerId: string): void;
   getResult(): { isTie: boolean; winnerId: string; loserId: string };
   isRoomFull(): boolean;
   isRoomEmpty(): boolean;

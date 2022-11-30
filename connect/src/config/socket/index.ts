@@ -5,9 +5,15 @@ import {
   deleteRoom,
   getRoom,
   IRoom,
+  ROOM_STATE,
 } from "../../utils/room";
 import { createPlayer } from "../../utils/player";
-import {} from "../../utils/roomTimer";
+import {
+  getRoomTimer,
+  createRoomTimer,
+  DEFAULT_BEFORE_GAME_START_LEFT_SEC,
+  DEFAULT_GAME_END_LEFT_SEC,
+} from "../../utils/roomTimer";
 import * as authService from "../../services/auth";
 import * as roomService from "../../services/room";
 import { Server as HttpServer } from "http";
@@ -109,24 +115,72 @@ class GameSocket {
 
   listen(): void {
     this.io.on("connection", (socket) => {
+      const player = createPlayer(
+        socket.data.player.name,
+        socket.data.player.id
+      );
       if (hasRoom(socket.data.roomId)) {
-        const player = createPlayer(
-          socket.data.player.name,
-          socket.data.player.id
-        );
         const room = getRoom(socket.data.roomId) as IRoom;
         room.addPlayer(player);
       } else {
-        const player = createPlayer(
-          socket.data.player.name,
-          socket.data.player.id
-        );
         createRoom(socket.data.roomId, {
           hostId: player.id,
           config: socket.data.room.config,
           players: [player],
         });
       }
+      socket.join(socket.data.room.id);
+
+      socket.on("ready", (done) => {
+        const roomId = socket.data.user.roomId;
+        const room = getRoom(socket.data.user.roomId);
+        if (!isNil(room)) {
+          room.updatePlayerToReady(socket.data.player.id);
+          if (room.isRoomReady()) {
+            room.updateState(ROOM_STATE.GAME_BEFORE_START);
+            withDone(done)(createResponse({}, { isSuccess: true }));
+            const roomTimer = (() => {
+              let _roomTimer = getRoomTimer(roomId);
+              if (isNil(_roomTimer)) {
+                _roomTimer = createRoomTimer(roomId);
+              }
+              return _roomTimer;
+            })();
+            roomTimer.startBeforeGameStartCountDown(
+              DEFAULT_BEFORE_GAME_START_LEFT_SEC,
+              (leftSec: number) => {
+                this.io.in(roomId).emit("before_start_game", leftSec);
+              },
+              () => {
+                roomTimer.clearBeforeGameStartCountDown();
+                room.updateState(ROOM_STATE.GAME_START);
+                this.io.in(roomId).emit("game_start");
+                roomTimer.startGameEndCountDown(
+                  DEFAULT_GAME_END_LEFT_SEC,
+                  (leftSec: number) => {
+                    this.io.in(roomId).emit("game_leftSec", leftSec);
+                  },
+                  () => {
+                    room.updateState(ROOM_STATE.GAME_END);
+                    roomTimer.clearGameEndCountDown();
+                    const result = room.getResult();
+                    this.io.in(roomId).emit("game_over", result);
+                  }
+                );
+              }
+            );
+          } else {
+            withDone(done)(createResponse({}, { isSuccess: true }));
+          }
+        } else {
+          withDone(done)(
+            createResponse(
+              {},
+              { isSuccess: false, message: "ROOM IS NOT EXIST" }
+            )
+          );
+        }
+      });
       // const onLeave = async (room: Room) => {
       //   const isRoomEmpty = Room.isRoomEmpty(room);
       //   const isHost = room.host.id === socket.id;
@@ -195,64 +249,6 @@ class GameSocket {
       //     }
       //   );
       // };
-      // socket.on("join_room", async (roomId: string, done) => {
-      //   if (!isEmpty(socket.data.user.name)) {
-      //     const room = await this.roomManager.getRoom(roomId);
-      //     if (!isNil(room)) {
-      //       const participant = new Participant(
-      //         socket.data.user.name,
-      //         socket.id
-      //       );
-      //       Room.addParticipant(room, participant);
-      //       await this.roomManager.updateRoom(roomId, room);
-      //       socket.join(roomId);
-      //       socket.data.user.roomId = roomId;
-      //       withDone(done)(createResponse({}, { isSuccess: true }));
-      //     } else {
-      //       withDone(done)(
-      //         createResponse(
-      //           {},
-      //           { isSuccess: false, message: "ROOM IS NOT EXIST" }
-      //         )
-      //       );
-      //     }
-      //   } else {
-      //     withDone(done)(
-      //       createResponse({}, { isSuccess: false, message: "NAME IS EMPTY" })
-      //     );
-      //   }
-      // });
-      // socket.on("ready", async (done) => {
-      //   if (!isEmpty(socket.data.user.roomId)) {
-      //     const room = await this.roomManager.getRoom(socket.data.user.roomId);
-      //     if (!isNil(room)) {
-      //       Room.updateParticipantReady(room, socket.id);
-      //       if (Room.isRoomReady(room)) {
-      //         Room.updateState(room, ROOM_STATE.GAME_BEFORE_START);
-      //         await this.roomManager.updateRoom(room.id, room);
-      //         withDone(done)(createResponse({}, { isSuccess: true }));
-      //         onReady(room);
-      //       } else {
-      //         await this.roomManager.updateRoom(room.id, room);
-      //         withDone(done)(createResponse({}, { isSuccess: true }));
-      //       }
-      //     } else {
-      //       withDone(done)(
-      //         createResponse(
-      //           {},
-      //           { isSuccess: false, message: "ROOM IS NOT EXIST" }
-      //         )
-      //       );
-      //     }
-      //   } else {
-      //     withDone(done)(
-      //       createResponse(
-      //         {},
-      //         { isSuccess: false, message: "IS NOT JOINED ROOM" }
-      //       )
-      //     );
-      //   }
-      // });
       // socket.on("reset_room", async (done) => {
       //   const roomId = socket.data.user.roomId;
       //   if (!isEmpty(roomId)) {

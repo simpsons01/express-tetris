@@ -56,18 +56,19 @@ class RoomTimer {
 
 const store = new Map<string, RoomTimer>();
 
-export const createTimer = (id: string): RoomTimer => {
+export const createRoomTimer = (id: string): RoomTimer => {
   const roomTimer = new RoomTimer();
   store.set(id, roomTimer);
   return roomTimer;
 };
 
-export const getTimer = (id: string): RoomTimer | undefined => store.get(id);
+export const getRoomTimer = (id: string): RoomTimer | undefined =>
+  store.get(id);
 
-export const deleteTimer = (id: string): void => {
+export const deleteRoomTimer = (id: string): void => {
   store.delete(id);
 };
 
-export const hasTimer = (id: string): boolean => {
+export const hasRoomTimer = (id: string): boolean => {
   return !isNil(store.get(id));
 };

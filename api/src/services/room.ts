@@ -2,39 +2,17 @@ import { isNil } from "ramda";
 import { getRedisClient } from "../config/redis";
 import { IPlayer } from "./player";
 
-export enum ROOM_STATE {
-  CREATED,
-  WAITING_ROOM_FULL,
-  GAME_BEFORE_START,
-  GAME_START,
-  GAME_INTERRUPT,
-  GAME_END,
-}
-
+export type RoomConfig = {
+  initialLevel: number;
+  playerLimitNum: number;
+};
 interface IRoom {
   id: string;
   name: string;
   hostId: string;
-  playerLimitNum: number;
-  state: ROOM_STATE;
+  config: RoomConfig;
   players: Array<IPlayer>;
 }
-
-export const createRoomObject = (
-  id: string,
-  name: string,
-  hostId: string,
-  players: Array<IPlayer> = [],
-  playerLimitNum = 2,
-  initialState: ROOM_STATE = ROOM_STATE.CREATED
-): IRoom => ({
-  id,
-  name,
-  hostId,
-  playerLimitNum,
-  state: initialState,
-  players,
-});
 
 export const getRoomIds = async (): Promise<Array<string>> => {
   const redis = getRedisClient();

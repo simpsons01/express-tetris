@@ -1,31 +1,5 @@
 import { isNil } from "ramda";
-import { getRedisClient } from "../config/redis";
-
-export class Participant {
-  id: string;
-  name: string;
-  score = 0;
-  isReady = false;
-
-  constructor(name: string, id: string) {
-    this.name = name;
-    this.id = id;
-  }
-
-  updateScore(score: number) {
-    this.score += score;
-  }
-
-  notReady() {
-    this.isReady = false;
-  }
-
-  ready() {
-    this.isReady = true;
-  }
-}
-
-export const DEFAULT_ROOM_PARTICIPANT_NUM = 2;
+import { IPlayer } from "./player";
 
 export enum ROOM_STATE {
   CREATED,
@@ -36,89 +10,103 @@ export enum ROOM_STATE {
   GAME_END,
 }
 
-export class Room {
+export type RoomConfig = {
+  initialLevel: number;
+  playerLimitNum: number;
+};
+
+export interface IRoom {
   id: string;
   name: string;
-  host: {
-    name: Participant["name"];
-    id: Participant["id"];
-  };
-  state: ROOM_STATE = ROOM_STATE.CREATED;
-  participantLimitNum: number;
-  participants: Array<Participant> = [];
+  hostId: string;
+  state: ROOM_STATE;
+  config: RoomConfig;
+  players: Array<IPlayer>;
 
-  constructor(
-    id: string,
-    name: string,
-    host: Participant,
-    participantLimitNum: number,
-    initialState?: ROOM_STATE
-  ) {
+  updateState(state: ROOM_STATE): void;
+  addPlayer(player: IPlayer): void;
+  removePlayer(playerId: string): void;
+  updatePlayerScore(playerId: string, score: number): void;
+  getResult(): { isTie: boolean; winnerId: string; loserId: string };
+  isRoomFull(): boolean;
+  isRoomEmpty(): boolean;
+  isRoomReady(): boolean;
+  reset(): void;
+}
+
+class Room implements IRoom {
+  id: string;
+  name: string;
+  hostId: string;
+  state: ROOM_STATE;
+  config: RoomConfig;
+  players: Array<IPlayer>;
+
+  constructor({
+    id,
+    name,
+    hostId,
+    config,
+    players,
+    state,
+  }: {
+    id: string;
+    name: string;
+    hostId: string;
+    state: ROOM_STATE;
+    config: RoomConfig;
+    players: Array<IPlayer>;
+  }) {
     this.id = id;
     this.name = name;
-    this.host = {
-      id: host.id,
-      name: host.name,
-    };
-    this.participants.push(host);
-    this.participantLimitNum = participantLimitNum;
-    if (!isNil(initialState)) {
-      this.state = initialState;
+    this.hostId = hostId;
+    this.state = state;
+    this.config = config;
+    this.players = players;
+  }
+
+  updateState(state: ROOM_STATE) {
+    this.state = state;
+  }
+
+  addPlayer(player: IPlayer): void {
+    if (!this.isRoomFull()) {
+      this.players.push(player);
     }
   }
 
-  static addParticipant(room: Room, participant: Participant): void {
-    if (!Room.isRoomFull(room)) {
-      room.participants.push(participant);
-    }
-  }
-
-  static removeParticipant(room: Room, participantId: string): void {
-    const index = room.participants.findIndex(
-      (participant) => participant.id === participantId
-    );
+  removePlayer(playerId: string): void {
+    const index = this.players.findIndex((player) => player.id === playerId);
     if (index > -1) {
-      room.participants.splice(index, 1);
+      this.players.splice(index, 1);
     }
   }
 
-  static updateParticipantScore(
-    room: Room,
-    participantId: string,
-    score: number
-  ): void {
-    room.participants.forEach((participant) => {
-      if (participant.id === participantId) {
-        Participant.updateScore(participant, score);
-      }
+  updatePlayerScore(playerId: string, score: number): void {
+    this.players.forEach((player) => {
+      if (player.id === playerId) player.updateScore(score);
     });
   }
 
-  static updateParticipantReady(room: Room, participantId: string): void {
-    room.participants.forEach((participant) => {
-      if (participant.id === participantId) {
-        Participant.ready(participant);
-      }
+  updatePlayerToReady(playerId: string): void {
+    this.players.forEach((player) => {
+      if (player.id === playerId) player.ready();
     });
   }
 
-  static updateState(room: Room, state: ROOM_STATE): void {
-    room.state = state;
-  }
-
-  static getResult(room: Room): {
+  getResult(): {
     isTie: boolean;
     winnerId: string;
     loserId: string;
   } {
-    let winner: Participant = room.participants[0],
-      loser: Participant = room.participants[0];
-    for (const participant of room.participants) {
-      if (participant.score > winner.score) {
-        winner = participant;
+    let winner: IPlayer = this.players[0],
+      loser: IPlayer = this.players[0];
+    for (const player of this.players) {
+      if (player.score > winner.score) {
+        winner = player;
       }
-      if (participant.score < loser.score) {
-        loser = participant;
+      if (player.score < loser.score) {
+        loser = player;
       }
     }
     return {
@@ -128,163 +116,45 @@ export class Room {
     };
   }
 
-  static isRoomFull(room: Room): boolean {
-    return room.participants.length === room.participantLimitNum;
+  isRoomFull(): boolean {
+    return this.players.length === this.config.playerLimitNum;
   }
 
-  static isRoomNotFull(room: Room): boolean {
-    return room.participants.length < room.participantLimitNum;
+  isRoomEmpty(): boolean {
+    return this.players.length === 0;
   }
 
-  static isRoomEmpty(room: Room): boolean {
-    return room.participants.length === 0;
+  isRoomReady(): boolean {
+    return this.isRoomFull() && this.players.every((player) => player.isReady);
   }
 
-  static isRoomReady(room: Room): boolean {
-    return (
-      room.participants.length === room.participantLimitNum &&
-      room.participants.every((participant) => participant.isReady)
-    );
-  }
-
-  static reset(room: Room): void {
-    Room.updateState(room, ROOM_STATE.WAITING_ROOM_FULL);
-    room.participants.forEach((participant) =>
-      Participant.notReady(participant)
-    );
+  reset() {
+    this.updateState(ROOM_STATE.CREATED);
+    this.players.forEach((player) => player.notReady());
   }
 }
 
-export class RoomManager {
-  private async _getRoomIdSet(): Promise<Array<string> | null> {
-    return new Promise((resolve, reject) => {
-      const redis = getRedisClient();
-      redis.smembers("rooms", (err, res) => {
-        if (err) {
-          return reject(err);
-        }
-        resolve(res);
-      });
-    });
-  }
+const store = new Map<string, IRoom>();
 
-  private async _setRoomIdSet(roomId: string): Promise<void> {
-    return new Promise((resolve, reject) => {
-      const redis = getRedisClient();
-      redis.sadd("rooms", roomId, (err) => {
-        if (err) {
-          return reject(err);
-        }
-        resolve();
-      });
-    });
-  }
+export const createRoom = (roomParam: {
+  id: string;
+  name: string;
+  hostId: string;
+  config: RoomConfig;
+  players: Array<IPlayer>;
+  state?: ROOM_STATE;
+}): Room => {
+  const room = new Room({ state: ROOM_STATE.CREATED, ...roomParam });
+  store.set(roomParam.id, room);
+  return room;
+};
 
-  private async _removeRoomIdSet(roomId: string): Promise<void> {
-    return new Promise((resolve, reject) => {
-      const redis = getRedisClient();
-      redis.srem("rooms", roomId, (err) => {
-        if (err) {
-          return reject(err);
-        }
-        resolve();
-      });
-    });
-  }
+export const getRoom = (id: string): IRoom | undefined => store.get(id);
 
-  private async _getRoomNum(): Promise<number | null> {
-    return new Promise((resolve, reject) => {
-      const redis = getRedisClient();
-      redis.scard("rooms", (err, res) => {
-        if (err) {
-          return reject(err);
-        }
-        resolve(res);
-      });
-    });
-  }
+export const deleteRoom = (id: string): void => {
+  store.delete(id);
+};
 
-  private async _getRoom(roomId: string): Promise<Room | null> {
-    return new Promise((resolve, reject) => {
-      const redis = getRedisClient();
-      redis.get(roomId, (err, res) => {
-        if (err) {
-          return reject(err);
-        }
-        resolve(isNil(res) ? res : JSON.parse(res));
-      });
-    });
-  }
-
-  private async _setRoom(roomId: string, room: Room): Promise<void> {
-    return new Promise((resolve, reject) => {
-      const redis = getRedisClient();
-      redis.set(roomId, JSON.stringify(room), (err) => {
-        if (err) {
-          return reject(err);
-        }
-        resolve();
-      });
-    });
-  }
-
-  private async _delRoom(roomId: string): Promise<void> {
-    return new Promise((resolve, reject) => {
-      const redis = getRedisClient();
-      redis.del(roomId, (err) => {
-        if (err) {
-          return reject(err);
-        }
-        resolve();
-      });
-    });
-  }
-
-  async getRooms(): Promise<Array<Room | null> | null> {
-    const rooms = [];
-    const roomIdSet = (await this._getRoomIdSet()) ?? [];
-    for (const roomId of roomIdSet) {
-      const room = await this._getRoom(roomId);
-      if (!isNil(room)) {
-        rooms.push(room);
-      }
-    }
-    return rooms;
-  }
-
-  async getRoom(roomId: string): Promise<Room | null> {
-    const room = await this._getRoom("room:" + roomId);
-    return room;
-  }
-
-  async createRoom(
-    name: string,
-    host: Participant,
-    state?: ROOM_STATE
-  ): Promise<Room> {
-    const roomNum = (await this._getRoomNum()) ?? 0;
-    const roomId = `${roomNum + 1}`;
-    const room = new Room(
-      roomId,
-      name,
-      host,
-      DEFAULT_ROOM_PARTICIPANT_NUM,
-      state
-    );
-    await this._setRoom("room:" + roomId, room);
-    await this._setRoomIdSet("room:" + roomId);
-    return room;
-  }
-
-  async updateRoom(roomId: string, room: Room): Promise<void> {
-    const isRoomExist = !isNil(await this._getRoom("room:" + roomId));
-    if (isRoomExist) {
-      await this._setRoom("room:" + roomId, room);
-    }
-  }
-
-  async deleteRoom(roomId: string): Promise<void> {
-    await this._delRoom("room:" + roomId);
-    await this._removeRoomIdSet("room:" + roomId);
-  }
-}
+export const hasRoom = (id: string): boolean => {
+  return !isNil(store.get(id));
+};

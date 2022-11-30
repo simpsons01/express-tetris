@@ -1,15 +1,20 @@
 version: "3.9"
 
 services:
-  api-service:
+  public-api-service:
     build:
       context: ./api
-      dockerfile: Dockerfile.developnment
+      dockerfile: Dockerfile.public.developnment
     volumes:
       - ./api:/app
       - /app/node_modules/
-    ports:
-      - "3131:3131"
+  private-api-service:
+    build:
+      context: ./api
+      dockerfile: Dockerfile.private.developnment
+    volumes:
+      - ./api:/app
+      - /app/node_modules/
   connect-service:
     build:
       context: ./connect
@@ -17,14 +22,12 @@ services:
     volumes:
       - ./connect:/app
       - /app/node_modules/
-    ports:
-      - "3030:3030"
   proxy:
     build:
       context: ./.nginx
       dockerfile: Dockerfile.developnment
     depends_on:
-      - api-service
+      - public-api-service
       - connect-service
     ports:
       - "3333:8080"

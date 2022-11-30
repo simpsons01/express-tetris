@@ -4,7 +4,7 @@ import express from "express";
 import bodyParser from "body-parser";
 import gameSocket from "./config/socket";
 import env from "./config/env";
-import { isDev } from "./util/index";
+import { isDev } from "./utils/index";
 import {
   getRedisClient,
   connect as connectToRedisClient,

@@ -9,6 +9,8 @@ import {
 
 const router = Router();
 
+router.get("/:id", catchAsyncError(roomController.getRoom));
+
 router.post(
   "/add-player",
   validateMiddleware(addNewPlayerToRoomSchema),

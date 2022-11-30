@@ -22,6 +22,8 @@ services:
     volumes:
       - ./connect:/app
       - /app/node_modules/
+    depends_on:
+      - private-api-service
   proxy:
     build:
       context: ./.nginx

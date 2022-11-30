@@ -1,160 +1,27 @@
-import { isNil } from "ramda";
-import { IPlayer } from "./player";
+import { AxiosResponse } from "axios";
+import http from "../utils/http";
 
-export enum ROOM_STATE {
-  CREATED,
-  WAITING_ROOM_FULL,
-  GAME_BEFORE_START,
-  GAME_START,
-  GAME_INTERRUPT,
-  GAME_END,
-}
+export const getRoom = async (roomId: string) =>
+  await http.get<
+    any,
+    AxiosResponse<{
+      room: {
+        id: string;
+        name: string;
+        hostId: string;
+        config: {
+          initialLevel: number;
+          playerLimitNum: number;
+        };
+        players: Array<{ name: string; id: string }>;
+      };
+    }>
+  >(`/room/${roomId}`);
 
-export type RoomConfig = {
-  initialLevel: number;
-  playerLimitNum: number;
-};
-
-export interface IRoom {
-  id: string;
-  name: string;
-  hostId: string;
-  state: ROOM_STATE;
-  config: RoomConfig;
-  players: Array<IPlayer>;
-
-  updateState(state: ROOM_STATE): void;
-  addPlayer(player: IPlayer): void;
-  removePlayer(playerId: string): void;
-  updatePlayerScore(playerId: string, score: number): void;
-  getResult(): { isTie: boolean; winnerId: string; loserId: string };
-  isRoomFull(): boolean;
-  isRoomEmpty(): boolean;
-  isRoomReady(): boolean;
-  reset(): void;
-}
-
-class Room implements IRoom {
-  id: string;
-  name: string;
-  hostId: string;
-  state: ROOM_STATE;
-  config: RoomConfig;
-  players: Array<IPlayer>;
-
-  constructor({
-    id,
-    name,
-    hostId,
-    config,
-    players,
-    state,
-  }: {
-    id: string;
-    name: string;
-    hostId: string;
-    state: ROOM_STATE;
-    config: RoomConfig;
-    players: Array<IPlayer>;
-  }) {
-    this.id = id;
-    this.name = name;
-    this.hostId = hostId;
-    this.state = state;
-    this.config = config;
-    this.players = players;
-  }
-
-  updateState(state: ROOM_STATE) {
-    this.state = state;
-  }
-
-  addPlayer(player: IPlayer): void {
-    if (!this.isRoomFull()) {
-      this.players.push(player);
-    }
-  }
-
-  removePlayer(playerId: string): void {
-    const index = this.players.findIndex((player) => player.id === playerId);
-    if (index > -1) {
-      this.players.splice(index, 1);
-    }
-  }
-
-  updatePlayerScore(playerId: string, score: number): void {
-    this.players.forEach((player) => {
-      if (player.id === playerId) player.updateScore(score);
-    });
-  }
-
-  updatePlayerToReady(playerId: string): void {
-    this.players.forEach((player) => {
-      if (player.id === playerId) player.ready();
-    });
-  }
-
-  getResult(): {
-    isTie: boolean;
-    winnerId: string;
-    loserId: string;
-  } {
-    let winner: IPlayer = this.players[0],
-      loser: IPlayer = this.players[0];
-    for (const player of this.players) {
-      if (player.score > winner.score) {
-        winner = player;
-      }
-      if (player.score < loser.score) {
-        loser = player;
-      }
-    }
-    return {
-      isTie: winner.score === loser.score,
-      winnerId: winner.id,
-      loserId: loser.id,
-    };
-  }
-
-  isRoomFull(): boolean {
-    return this.players.length === this.config.playerLimitNum;
-  }
-
-  isRoomEmpty(): boolean {
-    return this.players.length === 0;
-  }
-
-  isRoomReady(): boolean {
-    return this.isRoomFull() && this.players.every((player) => player.isReady);
-  }
-
-  reset() {
-    this.updateState(ROOM_STATE.CREATED);
-    this.players.forEach((player) => player.notReady());
-  }
-}
-
-const store = new Map<string, IRoom>();
-
-export const createRoom = (roomParam: {
-  id: string;
-  name: string;
-  hostId: string;
-  config: RoomConfig;
-  players: Array<IPlayer>;
-  state?: ROOM_STATE;
-}): Room => {
-  const room = new Room({ state: ROOM_STATE.CREATED, ...roomParam });
-  store.set(roomParam.id, room);
-  return room;
-};
-
-export const getRoom = (id: string): IRoom | undefined => store.get(id);
-
-export const deleteRoom = (id: string): void => {
-  store.delete(id);
-};
-
-export const hasRoom = (id: string): boolean => {
-  return !isNil(store.get(id));
-};
+export const removePlayerFromRoom = async (payload: {
+  roomId: string;
+  playerName: string;
+}) =>
+  await http.post("/room/remove-player", {
+    data: payload,
+  });

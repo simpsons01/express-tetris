@@ -1,13 +1,18 @@
 import { Server as SocketServer } from "socket.io";
-import { RoomManager, ROOM_STATE, Participant, Room } from "../services/room";
+import {
+  RoomManager,
+  ROOM_STATE,
+  Participant,
+  Room,
+} from "../../services/room";
 import {
   RoomTimerManager,
   RoomTimer,
   DEFAULT_BEFORE_GAME_START_LEFT_SEC,
   DEFAULT_GAME_END_LEFT_SEC,
-} from "../services/timer";
+} from "../../services/timer";
 import { Server as HttpServer } from "http";
-import { AnyFunction, AnyObject } from "../util/types";
+import { AnyFunction, AnyObject } from "../../util/types";
 import { isNil, is, isEmpty } from "ramda";
 
 // TODO: 創建socket的options不行是AnyObject
@@ -53,8 +58,6 @@ class GameSocketService {
 
   constructor(httpServer: HttpServer, options: SocketServerOptions) {
     this.io = new SocketServer(httpServer, options);
-    this.roomManager = new RoomManager();
-    this.roomTimerManager = new RoomTimerManager();
   }
 
   listen(): void {
@@ -71,7 +74,9 @@ class GameSocketService {
         const isHost = room.host.id === socket.id;
         if (isRoomEmpty || isHost) {
           if (this.roomTimerManager.hasTimer(room.id)) {
-            const roomTimer = this.roomTimerManager.getTimer(room.id) as RoomTimer;
+            const roomTimer = this.roomTimerManager.getTimer(
+              room.id
+            ) as RoomTimer;
             roomTimer.clear();
             this.roomTimerManager.deleteTimer(room.id);
           }
@@ -80,7 +85,10 @@ class GameSocketService {
             this.io.in(room.id).emit("room_host_leave");
           }
         } else {
-          if (room.state === ROOM_STATE.GAME_START || room.state === ROOM_STATE.GAME_BEFORE_START) {
+          if (
+            room.state === ROOM_STATE.GAME_START ||
+            room.state === ROOM_STATE.GAME_BEFORE_START
+          ) {
             Room.updateState(room, ROOM_STATE.GAME_INTERRUPT);
             await this.roomManager.updateRoom(room.id, room);
             const roomTimer = this.roomTimerManager.getTimer(room.id);
@@ -131,54 +139,31 @@ class GameSocketService {
         );
       };
 
-      socket.on("get_socket_data", (done) => {
-        const { name, roomId } = socket.data.user;
-        withDone(done)(createResponse({ name, roomId }));
-      });
-
-      socket.on("get_rooms", async (done) => {
-        const rooms = await this.roomManager.getRooms();
-        withDone(done)(createResponse({ rooms }));
-      });
-
-      socket.on("create_room", async (roomName: string, done) => {
-        if (!isEmpty(socket.data.user.name)) {
-          if (isEmpty(socket.data.user.roomId)) {
-            const participant = new Participant(socket.data.user.name, socket.id);
-            const room = await this.roomManager.createRoom(
-              roomName,
-              participant,
-              ROOM_STATE.WAITING_ROOM_FULL
-            );
-            socket.join(room.id);
-            socket.data.user.roomId = room.id;
-            this.roomTimerManager.createTimer(room.id);
-            withDone(done)(createResponse({ roomId: room.id }));
-          } else {
-            withDone(done)(
-              createResponse({ roomId: null }, { isSuccess: false, message: "ALREADY IN ROOM" })
-            );
-          }
-        } else {
-          withDone(done)(createResponse({ roomId: null }, { isSuccess: false, message: "NAME IS EMPTY" }));
-        }
-      });
-
       socket.on("join_room", async (roomId: string, done) => {
         if (!isEmpty(socket.data.user.name)) {
           const room = await this.roomManager.getRoom(roomId);
           if (!isNil(room)) {
-            const participant = new Participant(socket.data.user.name, socket.id);
+            const participant = new Participant(
+              socket.data.user.name,
+              socket.id
+            );
             Room.addParticipant(room, participant);
             await this.roomManager.updateRoom(roomId, room);
             socket.join(roomId);
             socket.data.user.roomId = roomId;
             withDone(done)(createResponse({}, { isSuccess: true }));
           } else {
-            withDone(done)(createResponse({}, { isSuccess: false, message: "ROOM IS NOT EXIST" }));
+            withDone(done)(
+              createResponse(
+                {},
+                { isSuccess: false, message: "ROOM IS NOT EXIST" }
+              )
+            );
           }
         } else {
-          withDone(done)(createResponse({}, { isSuccess: false, message: "NAME IS EMPTY" }));
+          withDone(done)(
+            createResponse({}, { isSuccess: false, message: "NAME IS EMPTY" })
+          );
         }
       });
 
@@ -197,31 +182,20 @@ class GameSocketService {
               withDone(done)(createResponse({}, { isSuccess: true }));
             }
           } else {
-            withDone(done)(createResponse({}, { isSuccess: false, message: "ROOM IS NOT EXIST" }));
+            withDone(done)(
+              createResponse(
+                {},
+                { isSuccess: false, message: "ROOM IS NOT EXIST" }
+              )
+            );
           }
         } else {
-          withDone(done)(createResponse({}, { isSuccess: false, message: "IS NOT JOINED ROOM" }));
-        }
-      });
-
-      socket.on("leave_room", async (done) => {
-        const roomId = socket.data.user.roomId;
-        if (!isEmpty(roomId)) {
-          const room = await this.roomManager.getRoom(socket.data.user.roomId);
-          if (!isNil(room)) {
-            Room.removeParticipant(room, socket.id);
-            await this.roomManager.updateRoom(room.id, room);
-            socket.leave(room.id);
-            socket.data.user.roomId = "";
-            await onLeave(room);
-            withDone(done)(createResponse({}, { isSuccess: true }));
-          } else {
-            socket.leave(roomId);
-            socket.data.user.roomId = "";
-            withDone(done)(createResponse({}, { isSuccess: true }));
-          }
-        } else {
-          withDone(done)(createResponse({}, { isSuccess: false, message: "IS NOT JOINED ROOM" }));
+          withDone(done)(
+            createResponse(
+              {},
+              { isSuccess: false, message: "IS NOT JOINED ROOM" }
+            )
+          );
         }
       });
 
@@ -230,7 +204,10 @@ class GameSocketService {
         if (!isEmpty(roomId)) {
           const room = await this.roomManager.getRoom(socket.data.user.roomId);
           if (!isNil(room)) {
-            if (room.state === ROOM_STATE.GAME_END || room.state === ROOM_STATE.GAME_INTERRUPT) {
+            if (
+              room.state === ROOM_STATE.GAME_END ||
+              room.state === ROOM_STATE.GAME_INTERRUPT
+            ) {
               Room.reset(room);
               await this.roomManager.updateRoom(room.id, room);
             }
@@ -241,7 +218,12 @@ class GameSocketService {
             withDone(done)(createResponse({}, { isSuccess: true }));
           }
         } else {
-          withDone(done)(createResponse({}, { isSuccess: false, message: "IS NOT JOINED ROOM" }));
+          withDone(done)(
+            createResponse(
+              {},
+              { isSuccess: false, message: "IS NOT JOINED ROOM" }
+            )
+          );
         }
       });
 
@@ -256,10 +238,16 @@ class GameSocketService {
 
       socket.on("game_data_updated", async (updatedPayloads) => {
         if (!isEmpty(socket.data.user.roomId)) {
-          socket.to(socket.data.user.roomId).emit("other_game_data_updated", updatedPayloads);
-          const scorePayload = updatedPayloads.find((payload) => payload.type === "SCORE");
+          socket
+            .to(socket.data.user.roomId)
+            .emit("other_game_data_updated", updatedPayloads);
+          const scorePayload = updatedPayloads.find(
+            (payload) => payload.type === "SCORE"
+          );
           if (!isNil(scorePayload)) {
-            const room = await this.roomManager.getRoom(socket.data.user.roomId);
+            const room = await this.roomManager.getRoom(
+              socket.data.user.roomId
+            );
             if (!isNil(room)) {
               Room.updateParticipantScore(room, socket.id, scorePayload.data);
               await this.roomManager.updateRoom(room.id, room);
@@ -284,7 +272,10 @@ class GameSocketService {
 let gameSocketInstance: GameSocketService | undefined;
 
 export default {
-  initialize(httpServer: HttpServer, options: SocketServerOptions): GameSocketService {
+  initialize(
+    httpServer: HttpServer,
+    options: SocketServerOptions
+  ): GameSocketService {
     if (gameSocketInstance === undefined) {
       gameSocketInstance = new GameSocketService(httpServer, options);
     } else {

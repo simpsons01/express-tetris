@@ -3,8 +3,8 @@ import path from "path";
 
 const envPath =
   process.env.NODE_ENV === "development"
-    ? path.join(`${__dirname}/../.env.development`)
-    : path.join(`${__dirname}/../.env.production`);
+    ? path.join(`${__dirname}/../../.env.development`)
+    : path.join(`${__dirname}/../../.env.production`);
 
 dotenv.config({ path: envPath });
 

@@ -1,5 +1,5 @@
 import { isNil } from "ramda";
-import { getRedisClient } from "../redis";
+import { getRedisClient } from "../config/redis";
 
 export class Participant {
   id: string;
@@ -12,16 +12,16 @@ export class Participant {
     this.id = id;
   }
 
-  static updateScore(participant: Participant, score: number): void {
-    participant.score += score;
+  updateScore(score: number) {
+    this.score += score;
   }
 
-  static notReady(participant: Participant): void {
-    participant.isReady = false;
+  notReady() {
+    this.isReady = false;
   }
 
-  static ready(participant: Participant): void {
-    participant.isReady = true;
+  ready() {
+    this.isReady = true;
   }
 }
 
@@ -74,13 +74,19 @@ export class Room {
   }
 
   static removeParticipant(room: Room, participantId: string): void {
-    const index = room.participants.findIndex((participant) => participant.id === participantId);
+    const index = room.participants.findIndex(
+      (participant) => participant.id === participantId
+    );
     if (index > -1) {
       room.participants.splice(index, 1);
     }
   }
 
-  static updateParticipantScore(room: Room, participantId: string, score: number): void {
+  static updateParticipantScore(
+    room: Room,
+    participantId: string,
+    score: number
+  ): void {
     room.participants.forEach((participant) => {
       if (participant.id === participantId) {
         Participant.updateScore(participant, score);
@@ -143,7 +149,9 @@ export class Room {
 
   static reset(room: Room): void {
     Room.updateState(room, ROOM_STATE.WAITING_ROOM_FULL);
-    room.participants.forEach((participant) => Participant.notReady(participant));
+    room.participants.forEach((participant) =>
+      Participant.notReady(participant)
+    );
   }
 }
 
@@ -249,10 +257,20 @@ export class RoomManager {
     return room;
   }
 
-  async createRoom(name: string, host: Participant, state?: ROOM_STATE): Promise<Room> {
+  async createRoom(
+    name: string,
+    host: Participant,
+    state?: ROOM_STATE
+  ): Promise<Room> {
     const roomNum = (await this._getRoomNum()) ?? 0;
     const roomId = `${roomNum + 1}`;
-    const room = new Room(roomId, name, host, DEFAULT_ROOM_PARTICIPANT_NUM, state);
+    const room = new Room(
+      roomId,
+      name,
+      host,
+      DEFAULT_ROOM_PARTICIPANT_NUM,
+      state
+    );
     await this._setRoom("room:" + roomId, room);
     await this._setRoomIdSet("room:" + roomId);
     return room;

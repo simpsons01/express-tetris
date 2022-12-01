@@ -6,9 +6,25 @@ export const DEFAULT_BEFORE_GAME_START_LEFT_SEC = 3;
 
 export const DEFAULT_GAME_END_LEFT_SEC = 60;
 
-class RoomTimer {
-  beforeGameStartCountDownCleanHandler: null | AnyFunction = null;
-  endCountDownCleanHandler: null | AnyFunction = null;
+export interface IRoomTimer {
+  startBeforeGameStartCountDown(
+    leftSec: number,
+    onCountDown?: (leftSec: number) => void,
+    onComplete?: (...args: Array<unknown>) => void
+  ): void;
+  clearBeforeGameStartCountDown(): void;
+  startGameEndCountDown(
+    leftSec: number,
+    onCountDown?: (leftSec: number) => void,
+    onComplete?: (...args: Array<unknown>) => void
+  ): void;
+  clearGameEndCountDown(): void;
+  clear(): void;
+}
+
+class RoomTimer implements IRoomTimer {
+  private beforeGameStartCountDownCleanHandler: null | AnyFunction = null;
+  private endCountDownCleanHandler: null | AnyFunction = null;
 
   startBeforeGameStartCountDown(
     leftSec: number,
@@ -54,15 +70,15 @@ class RoomTimer {
   }
 }
 
-const store = new Map<string, RoomTimer>();
+const store = new Map<string, IRoomTimer>();
 
-export const createRoomTimer = (id: string): RoomTimer => {
+export const createRoomTimer = (id: string): IRoomTimer => {
   const roomTimer = new RoomTimer();
   store.set(id, roomTimer);
   return roomTimer;
 };
 
-export const getRoomTimer = (id: string): RoomTimer | undefined =>
+export const getRoomTimer = (id: string): IRoomTimer | undefined =>
   store.get(id);
 
 export const deleteRoomTimer = (id: string): void => {

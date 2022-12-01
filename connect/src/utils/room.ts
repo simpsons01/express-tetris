@@ -131,8 +131,8 @@ export const createRoom = (
   id: string,
   roomParam: {
     hostId: string;
-    config: RoomConfig;
     players: Array<IPlayer>;
+    config: RoomConfig;
     state?: ROOM_STATE;
   }
 ): Room => {

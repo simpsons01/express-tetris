@@ -95,31 +95,22 @@ class GameSocket {
         return next(new Error("already connected"));
       }
     }
-    try {
-      const {
-        data: { room },
-      } = await roomService.getRoom(query.roomId as string);
-      if (room.config.playerLimitNum === room.config.playerLimitNum) {
-        return next(new Error("room is full"));
-      }
+    next();
+  }
+
+  listen(): void {
+    this.io.on("connection", (socket) => {
+      const query = socket.handshake.query;
+      const roomInitialLevel = socket.handshake.query.roomInitialLevel;
       socket.data = {
         room: {
           id: query.roomId,
-          config: room.config,
         },
         player: {
           name: query.playerName,
           id: query.playerId,
         },
       };
-      next();
-    } catch (err) {
-      next(new Error("get room failed"));
-    }
-  }
-
-  listen(): void {
-    this.io.on("connection", (socket) => {
       const player = createPlayer(
         socket.data.player.name,
         socket.data.player.id
@@ -130,7 +121,12 @@ class GameSocket {
       } else {
         createRoom(socket.data.roomId, {
           hostId: player.id,
-          config: socket.data.room.config,
+          config: {
+            initialLevel: roomInitialLevel
+              ? parseInt(roomInitialLevel as string, 10)
+              : 1,
+            playerLimitNum: 2,
+          },
           players: [player],
         });
       }

@@ -6,6 +6,15 @@ import * as playerService from "../services/player";
 import crypto from "crypto";
 import { isNil } from "ramda";
 
+export const getPlayer = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+) => {
+  const self = req.player as playerService.IPlayer;
+  res.status(HTTP_STATUS_CODES.OK).json({ player: self });
+};
+
 export const createPlayer = async (
   req: Request,
   res: Response,

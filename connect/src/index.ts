@@ -24,13 +24,14 @@ const run = async () => {
     app.use(bodyParser.json());
     app.use(bodyParser.urlencoded({ extended: false }));
     const gameSocketInstance = gameSocket.initialize(httpServer, {
+      path: "/connect/socket.io",
       cors: {
         origin: env.ALLOW_ORIGIN,
       },
     });
     gameSocketInstance.io.adapter(createAdapter(redisClient, subRedisClient));
     gameSocketInstance.listen();
-    app.get("/health-check", (req, res) => res.status(200).end());
+    app.get("/connect/health-check", (req, res) => res.status(200).end());
     const port = env.PORT || 3030;
     httpServer.listen(port, () =>
       console.log(`Server is running at http://localhost:${port}`)

@@ -69,7 +69,7 @@ export const joinRoom = async (
   res: Response,
   next: NextFunction
 ) => {
-  const roomId = req.params.roomId;
+  const roomId = req.params.id;
   const self = req.player as IPlayer;
   const room = await roomService.getRoom(roomId);
   if (isNil(room)) {
@@ -94,7 +94,7 @@ export const leaveRoom = async (
   res: Response,
   next: NextFunction
 ) => {
-  const roomId = req.params.roomId;
+  const roomId = req.params.id;
   const self = req.player as IPlayer;
   const room = await roomService.getRoom(roomId);
   if (isNil(room)) {

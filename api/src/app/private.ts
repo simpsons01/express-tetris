@@ -16,8 +16,6 @@ const run = async () => {
   await connectToRedis();
   const app = express();
   if (!isDev()) app.set("trust proxy", true);
-
-  app.use(cors({ origin: env.ALLOW_ORIGIN }));
   app.use(bodyParser.json());
   app.use(bodyParser.urlencoded({ extended: false }));
   app.use(passport.initialize());

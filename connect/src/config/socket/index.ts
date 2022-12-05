@@ -64,7 +64,7 @@ class GameSocket {
 
   constructor(httpServer: HttpServer, options: SocketServerOptions) {
     this.io = new SocketServer(httpServer, options);
-    this.io.use(this.authMiddleware);
+    this.io.use(this.authMiddleware.bind(this));
   }
 
   async authMiddleware(
@@ -84,57 +84,55 @@ class GameSocket {
     ) {
       return next(new Error("miss required query"));
     }
+    const connectSockets = await this.io.fetchSockets();
+    for (const connectSocket of connectSockets) {
+      if (query.playerId === connectSocket.data.player.id) {
+        next(new Error("already connected"));
+        return;
+      }
+    }
     try {
       await authService.checkAuth(token);
     } catch (err) {
       return next(new Error("auth failed"));
     }
-    const connectSockets = await this.io.fetchSockets();
-    for (const connectSocket of connectSockets) {
-      if (query.playerId === connectSocket.data.user.player.id) {
-        return next(new Error("already connected"));
-      }
-    }
-    next();
-  }
-
-  listen(): void {
-    this.io.on("connection", (socket) => {
-      const query = socket.handshake.query;
-      const roomInitialLevel = socket.handshake.query.roomInitialLevel;
+    try {
+      const { data: room } = await roomService.getRoom(query.roomId as string);
       socket.data = {
-        room: {
-          id: query.roomId,
-        },
+        room,
         player: {
           name: query.playerName,
           id: query.playerId,
         },
       };
+    } catch (err) {
+      return next(new Error("get room Failed failed"));
+    }
+
+    next();
+  }
+
+  listen(): void {
+    this.io.on("connection", (socket) => {
       const player = createPlayer(
         socket.data.player.name,
         socket.data.player.id
       );
-      if (hasRoom(socket.data.roomId)) {
-        const room = getRoom(socket.data.roomId) as IRoom;
+      if (hasRoom(socket.data.room.id)) {
+        const room = getRoom(socket.data.room.id) as IRoom;
         room.addPlayer(player);
       } else {
-        createRoom(socket.data.roomId, {
+        createRoom(socket.data.room.id, {
           hostId: player.id,
-          config: {
-            initialLevel: roomInitialLevel
-              ? parseInt(roomInitialLevel as string, 10)
-              : 1,
-            playerLimitNum: 2,
-          },
+          config: socket.data.room.config,
           players: [player],
         });
       }
       socket.join(socket.data.room.id);
 
       socket.on("ready", (done) => {
-        const roomId = socket.data.user.roomId;
-        const room = getRoom(socket.data.user.roomId);
+        const roomId = socket.data.room.id;
+        const room = getRoom(roomId);
         if (!isNil(room)) {
           room.updatePlayerToReady(socket.data.player.id);
           if (room.isRoomReady()) {
@@ -183,7 +181,7 @@ class GameSocket {
       socket.on("game_data_updated", async (updatedPayloads) => {
         const roomId = socket.data.room.id;
         const playerId = socket.data.player.id;
-        const room = getRoom(socket.data.user.roomId);
+        const room = getRoom(roomId);
         if (!isNil(room)) {
           socket.to(roomId).emit("other_game_data_updated", updatedPayloads);
           const scorePayload = updatedPayloads.find(

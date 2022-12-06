@@ -187,7 +187,9 @@ class GameSocket {
           const scorePayload = updatedPayloads.find(
             (payload) => payload.type === "SCORE"
           );
-          room.updatePlayerScore(playerId, scorePayload.data);
+          if (!isNil(scorePayload)) {
+            room.updatePlayerScore(playerId, scorePayload.data);
+          }
         } else {
           socket.emit("error_occur");
         }

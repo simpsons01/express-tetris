@@ -60,5 +60,5 @@ export const updateRoom = async (room: IRoom) => {
 export const deleteRoom = async (roomId: string) => {
   const redis = getRedisClient();
   await redis.sRem("rooms", roomId);
-  await redis.del(roomId);
+  await redis.del(`room:${roomId}`);
 };

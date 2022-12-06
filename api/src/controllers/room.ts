@@ -179,7 +179,7 @@ export const removePlayerFromRoom = async (
       )
     );
   }
-  if (!room.players.find((player) => player.id === player.id)) {
+  if (!room.players.find(({ id }) => id === player.id)) {
     return next(
       createErrorResponse(
         HTTP_STATUS_CODES.BAD_REQUEST,
@@ -193,7 +193,7 @@ export const removePlayerFromRoom = async (
   } else {
     const newRoom = {
       ...room,
-      players: room.players.filter((player) => player.id !== player.id),
+      players: room.players.filter(({ id }) => id !== player.id),
     };
     if (isEmpty(newRoom.players)) {
       await roomService.deleteRoom(roomId);

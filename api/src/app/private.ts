@@ -30,8 +30,8 @@ const run = async () => {
     next(createErrorResponse(HTTP_STATUS_CODES.NOT_FOUND))
   );
   app.use(errorMiddleware);
-  const port = env.PORT || 3131;
-  app.listen(env.PORT || 3131, () => {
+  const port = env.PORT || 3030;
+  app.listen(env.PORT || 3030, () => {
     console.log(`Server is running at http://localhost:${port}`);
   });
 };

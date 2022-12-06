@@ -8,6 +8,8 @@ services:
     volumes:
       - ./api:/app
       - /app/node_modules/
+    ports:
+      - "9229:9229"
   private-api-service:
     build:
       context: ./api
@@ -15,6 +17,8 @@ services:
     volumes:
       - ./api:/app
       - /app/node_modules/
+    ports:
+      - "9228:9229"
   connect-service:
     build:
       context: ./connect
@@ -24,6 +28,8 @@ services:
       - /app/node_modules/
     depends_on:
       - private-api-service
+    ports:
+      - "9227:9229"
   proxy:
     build:
       context: ./.nginx

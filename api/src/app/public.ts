@@ -36,8 +36,8 @@ const run = async () => {
   );
   app.use(errorMiddleware);
 
-  const port = env.PORT || 3131;
-  app.listen(env.PORT || 3131, () => {
+  const port = env.PORT || 3030;
+  app.listen(env.PORT || 3030, () => {
     console.log(`Server is running at http://localhost:${port}`);
   });
 };

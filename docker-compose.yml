@@ -1,23 +1,44 @@
 version: "3.9"
 
 services:
-  web:
+  public-api-service:
     build:
-      context: .
-      dockerfile: Dockerfile.developnment
+      context: ./api
+      dockerfile: Dockerfile.public.developnment
     volumes:
-      - .:/app
+      - ./api:/app
       - /app/node_modules/
     ports:
       - "9229:9229"
+  private-api-service:
+    build:
+      context: ./api
+      dockerfile: Dockerfile.private.developnment
+    volumes:
+      - ./api:/app
+      - /app/node_modules/
+    ports:
+      - "9228:9229"
+  connect-service:
+    build:
+      context: ./connect
+      dockerfile: Dockerfile.developnment
+    volumes:
+      - ./connect:/app
+      - /app/node_modules/
+    depends_on:
+      - private-api-service
+    ports:
+      - "9227:9229"
   proxy:
     build:
       context: ./.nginx
       dockerfile: Dockerfile.developnment
     depends_on:
-      - web
+      - public-api-service
+      - connect-service
     ports:
-      - "3030:8080"
+      - "3333:3333"
   redis:
     build:
       context: ./.redis

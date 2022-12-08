@@ -34,7 +34,7 @@ export const createRoom = async (
 ) => {
   const { name, config } = req.body as {
     name: string;
-    config?: { initialLevel: number };
+    config?: { initialLevel: number; sec: number };
   };
   const self = req.player as IPlayer;
   const rooms = await roomService.getRooms();
@@ -49,6 +49,7 @@ export const createRoom = async (
   const defaultRoomConfig = {
     initialLevel: 1,
     playerLimitNum: 2,
+    sec: 60,
   };
   const newRoom = {
     id: roomId,

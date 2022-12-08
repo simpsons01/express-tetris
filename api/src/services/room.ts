@@ -5,6 +5,7 @@ import { IPlayer } from "./player";
 export type RoomConfig = {
   initialLevel: number;
   playerLimitNum: number;
+  sec: number;
 };
 interface IRoom {
   id: string;

@@ -13,7 +13,6 @@ import {
   getRoomTimer,
   createRoomTimer,
   DEFAULT_BEFORE_GAME_START_LEFT_SEC,
-  DEFAULT_GAME_END_LEFT_SEC,
   deleteRoomTimer,
 } from "../../utils/roomTimer";
 import * as authService from "../../services/auth";
@@ -151,7 +150,7 @@ class GameSocket {
                 room.updateState(ROOM_STATE.GAME_START);
                 this.io.in(roomId).emit("game_start");
                 roomTimer.startGameEndCountDown(
-                  DEFAULT_GAME_END_LEFT_SEC,
+                  room.config.sec,
                   (leftSec: number) => {
                     this.io.in(roomId).emit("game_leftSec", leftSec);
                   },
@@ -195,23 +194,34 @@ class GameSocket {
         }
       });
 
+      socket.on("get_room_config", async (done) => {
+        const roomId = socket.data.room.id;
+        const room = getRoom(roomId);
+        if (!isNil(room)) {
+          withDone(done)(
+            createResponse(
+              { initialLevel: room.config.initialLevel },
+              { isSuccess: true }
+            )
+          );
+        } else {
+          withDone(done)(createResponse({}, { isSuccess: false }));
+          socket.emit("error_occur");
+        }
+      });
+
       socket.on("reset_room", async (done) => {
         const roomId = socket.data.room.id;
         try {
           await roomService.getRoom(roomId);
           const room = getRoom(roomId);
           if (!isNil(room)) {
-            if (
-              room.state === ROOM_STATE.GAME_END ||
-              room.state === ROOM_STATE.GAME_INTERRUPT
-            ) {
-              if (hasRoomTimer(roomId)) {
-                const roomTimer = getRoomTimer(roomId) as IRoomTimer;
-                roomTimer.clear();
-                deleteRoomTimer(roomId);
-              }
-              room.reset();
+            if (hasRoomTimer(roomId)) {
+              const roomTimer = getRoomTimer(roomId) as IRoomTimer;
+              roomTimer.clear();
+              deleteRoomTimer(roomId);
             }
+            room.reset();
             withDone(done)(createResponse({}, { isSuccess: true }));
           } else {
             withDone(done)(createResponse({}, { isSuccess: false }));
@@ -237,7 +247,7 @@ class GameSocket {
               deleteRoomTimer(roomId);
             }
             deleteRoom(roomId);
-            if (!isHost) this.io.in(roomId).emit("room_host_leave");
+            if (isHost) this.io.in(roomId).emit("room_host_leave");
           } else {
             if (
               room.state === ROOM_STATE.GAME_START ||

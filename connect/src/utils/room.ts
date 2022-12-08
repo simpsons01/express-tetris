@@ -13,6 +13,7 @@ export enum ROOM_STATE {
 export type RoomConfig = {
   initialLevel: number;
   playerLimitNum: number;
+  sec: number;
 };
 
 export interface IRoom {

@@ -11,6 +11,7 @@ export const getRoom = async (roomId: string) =>
       config: {
         initialLevel: number;
         playerLimitNum: number;
+        sec: number;
       };
       players: Array<{ name: string; id: string }>;
     }>

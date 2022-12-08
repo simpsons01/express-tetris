@@ -4,6 +4,7 @@ export const createRoomSchema = Joi.object({
   name: Joi.string().alphanum().min(1).max(30).required(),
   config: Joi.object({
     initialLevel: Joi.number(),
+    sec: Joi.number(),
   }),
 });
 

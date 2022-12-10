@@ -6,6 +6,7 @@ export interface IPlayer {
   updateScore(score: number): void;
   notReady(): void;
   ready(): void;
+  reset(): void;
 }
 
 class Player implements IPlayer {
@@ -29,6 +30,11 @@ class Player implements IPlayer {
 
   ready() {
     this.isReady = true;
+  }
+
+  reset() {
+    this.isReady = false;
+    this.score = 0;
   }
 }
 

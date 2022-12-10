@@ -3,7 +3,6 @@ import { IPlayer } from "./player";
 
 export enum ROOM_STATE {
   CREATED,
-  WAITING_ROOM_FULL,
   GAME_BEFORE_START,
   GAME_START,
   GAME_INTERRUPT,
@@ -27,6 +26,8 @@ export interface IRoom {
   removePlayer(playerId: string): void;
   updatePlayerScore(playerId: string, score: number): void;
   updatePlayerToReady(playerId: string): void;
+  updatePlayerToNotReady(playerId: string): void;
+  resetPlayer(playerId: string): void;
   getResult(): { isTie: boolean; winnerId: string; loserId: string };
   isRoomFull(): boolean;
   isRoomEmpty(): boolean;
@@ -86,6 +87,12 @@ class Room implements IRoom {
     });
   }
 
+  updatePlayerToNotReady(playerId: string): void {
+    this.players.forEach((player) => {
+      if (player.id === playerId) player.notReady();
+    });
+  }
+
   getResult(): {
     isTie: boolean;
     winnerId: string;
@@ -120,9 +127,15 @@ class Room implements IRoom {
     return this.isRoomFull() && this.players.every((player) => player.isReady);
   }
 
+  resetPlayer(playerId: string): void {
+    this.players.forEach((player) => {
+      if (player.id === playerId) player.reset();
+    });
+  }
+
   reset() {
     this.updateState(ROOM_STATE.CREATED);
-    this.players.forEach((player) => player.notReady());
+    this.players.forEach((player) => player.reset());
   }
 }
 

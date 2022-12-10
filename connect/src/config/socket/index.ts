@@ -129,42 +129,46 @@ class GameSocket {
       }
       socket.join(socket.data.room.id);
 
+      const startGame = (room: IRoom, roomId: string) => {
+        room.updateState(ROOM_STATE.GAME_BEFORE_START);
+        const roomTimer = hasRoomTimer(roomId)
+          ? (getRoomTimer(roomId) as IRoomTimer)
+          : createRoomTimer(roomId);
+        roomTimer.startBeforeGameStartCountDown(
+          DEFAULT_BEFORE_GAME_START_LEFT_SEC,
+          (leftSec: number) => {
+            this.io.in(roomId).emit("before_start_game", leftSec);
+          },
+          () => {
+            roomTimer.clearBeforeGameStartCountDown();
+            room.updateState(ROOM_STATE.GAME_START);
+            this.io.in(roomId).emit("game_start");
+            roomTimer.startGameEndCountDown(
+              room.config.sec,
+              (leftSec: number) => {
+                this.io.in(roomId).emit("game_leftSec", leftSec);
+              },
+              () => {
+                room.updateState(ROOM_STATE.GAME_END);
+                roomTimer.clearGameEndCountDown();
+                const result = room.getResult();
+                this.io.in(roomId).emit("game_over", result);
+              }
+            );
+          }
+        );
+      };
+
       socket.on("ready", (done) => {
         const roomId = socket.data.room.id;
         const room = getRoom(roomId);
         if (!isNil(room)) {
-          room.updatePlayerToReady(socket.data.player.id);
-          if (room.isRoomReady()) {
-            room.updateState(ROOM_STATE.GAME_BEFORE_START);
+          if (room.state === ROOM_STATE.CREATED) {
+            room.updatePlayerToReady(socket.data.player.id);
             withDone(done)(createResponse({}, { isSuccess: true }));
-            const roomTimer = hasRoomTimer(roomId)
-              ? (getRoomTimer(roomId) as IRoomTimer)
-              : createRoomTimer(roomId);
-            roomTimer.startBeforeGameStartCountDown(
-              DEFAULT_BEFORE_GAME_START_LEFT_SEC,
-              (leftSec: number) => {
-                this.io.in(roomId).emit("before_start_game", leftSec);
-              },
-              () => {
-                roomTimer.clearBeforeGameStartCountDown();
-                room.updateState(ROOM_STATE.GAME_START);
-                this.io.in(roomId).emit("game_start");
-                roomTimer.startGameEndCountDown(
-                  room.config.sec,
-                  (leftSec: number) => {
-                    this.io.in(roomId).emit("game_leftSec", leftSec);
-                  },
-                  () => {
-                    room.updateState(ROOM_STATE.GAME_END);
-                    roomTimer.clearGameEndCountDown();
-                    const result = room.getResult();
-                    this.io.in(roomId).emit("game_over", result);
-                  }
-                );
-              }
-            );
+            if (room.isRoomReady()) startGame(room, roomId);
           } else {
-            withDone(done)(createResponse({}, { isSuccess: true }));
+            socket.emit("error_occur");
           }
         } else {
           withDone(done)(
@@ -221,13 +225,17 @@ class GameSocket {
               roomTimer.clear();
               deleteRoomTimer(roomId);
             }
-            room.reset();
+            if (room.state !== ROOM_STATE.CREATED) {
+              room.updateState(ROOM_STATE.CREATED);
+              room.reset();
+            }
             withDone(done)(createResponse({}, { isSuccess: true }));
           } else {
             withDone(done)(createResponse({}, { isSuccess: false }));
             socket.emit("error_occur");
           }
         } catch (err) {
+          console.log(err);
           socket.emit("error_occur");
         }
       });

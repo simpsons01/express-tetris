@@ -16,6 +16,8 @@ WORKDIR /app/
 
 ENV PORT=8080
 
+ENV PUBLIC=true
+
 EXPOSE ${PORT}
 
 COPY --from=BUILD /app/dist /app/dist/

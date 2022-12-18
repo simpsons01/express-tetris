@@ -1,12 +1,13 @@
 {
   "name": "express-tetris",
+  "type": "module",
   "version": "1.0.0",
   "description": "",
   "main": "index.js",
   "scripts": {
     "start": "cross-env NODE_ENV=production node dist/index.js",
     "dev": "cross-env NODE_ENV=development concurrently \"tsc --watch\" \"wait-on dist && nodemon --exec 'node --inspect=0.0.0.0  dist/index.js'\"",
-    "build": "tsc --strict false"
+    "build": "tsc"
   },
   "author": "",
   "license": "ISC",

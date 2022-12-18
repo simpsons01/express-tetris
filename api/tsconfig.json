@@ -1,13 +1,14 @@
 {
   "compilerOptions": {
-    "target": "ES2016",
+    "target": "ES6",
     "esModuleInterop": true,
     "allowSyntheticDefaultImports": true,
     "strict": true,
     "forceConsistentCasingInFileNames": true,
     "noFallthroughCasesInSwitch": true,
     "moduleResolution": "node",
-    "outDir": "dist"
+    "outDir": "dist",
+    "module": "commonjs"
   },
   "include": ["src"]
 }

@@ -5,18 +5,9 @@ import bodyParser from "body-parser";
 import gameSocket from "./config/socket";
 import env from "./config/env";
 import { isDev } from "./utils/index";
-import {
-  getRedisClient,
-  connect as connectToRedisClient,
-} from "./config/redis";
-import { createAdapter } from "@socket.io/redis-adapter";
 
 const run = async () => {
   try {
-    const redisClient = getRedisClient();
-    const subRedisClient = redisClient.duplicate();
-    await connectToRedisClient();
-    await subRedisClient.connect();
     const app = express();
     const httpServer = http.createServer(app);
     if (!isDev()) app.set("trust proxy", true);
@@ -29,7 +20,6 @@ const run = async () => {
         origin: env.ALLOW_ORIGIN,
       },
     });
-    gameSocketInstance.io.adapter(createAdapter(redisClient, subRedisClient));
     gameSocketInstance.listen();
     app.get("/connect/health-check", (req, res) => res.status(200).end());
     const port = env.PORT || 3030;

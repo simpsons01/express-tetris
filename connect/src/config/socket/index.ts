@@ -214,6 +214,8 @@ class GameSocket {
         }
       });
 
+      socket.on("ping", (cb) => cb());
+
       socket.on("reset_room", async (done) => {
         const roomId = socket.data.room.id;
         try {

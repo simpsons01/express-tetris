@@ -21,7 +21,7 @@ class Player implements IPlayer {
   }
 
   updateScore(score: number) {
-    this.score += score;
+    this.score = score;
   }
 
   notReady() {

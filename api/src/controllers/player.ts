@@ -1,4 +1,4 @@
-import { signToken } from "./../services/token";
+import { signToken } from "../utils/token";
 import { HTTP_STATUS_CODES } from "../utils/httpStatus";
 import { createErrorResponse } from "../utils/error";
 import { Response, Request, NextFunction } from "express";
@@ -6,11 +6,7 @@ import * as playerService from "../services/player";
 import crypto from "crypto";
 import { isNil } from "ramda";
 
-export const getPlayer = async (
-  req: Request,
-  res: Response,
-  next: NextFunction
-) => {
+export const getPlayer = async (req: Request, res: Response) => {
   const self = req.player as playerService.IPlayer;
   res.status(HTTP_STATUS_CODES.OK).json({ player: self });
 };

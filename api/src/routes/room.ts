@@ -1,9 +1,9 @@
-import { catchAsyncError } from "../../utils/error";
+import { catchAsyncError } from "../utils/error";
 import { Router } from "express";
-import * as roomController from "../../controllers/room";
-import authMiddleware from "../../middlewares/auth";
-import validateMiddleware from "../../middlewares/validate";
-import { createRoomSchema } from "../../validations/room";
+import * as roomController from "../controllers/room";
+import authMiddleware from "../middlewares/auth";
+import validateMiddleware from "../middlewares/validate";
+import { createRoomSchema } from "../validations/room";
 
 const router = Router();
 

@@ -34,3 +34,11 @@ export const createCountdown = (
   if (is(Function, onCountDown)) onCountDown(leftSec);
   return clean;
 };
+
+export const toHex = (val: string) => {
+  let string = "";
+  for (let i = 0; i < val.length; i++) {
+    string += val.charCodeAt(i).toString(16);
+  }
+  return string;
+};

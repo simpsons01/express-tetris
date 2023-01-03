@@ -6,6 +6,7 @@ import * as playerService from "../services/player";
 import crypto from "crypto";
 import { isEmpty, isNil } from "ramda";
 import { IPlayer } from "../services/player";
+import { ROOM_STATE, PLAYER_STATE } from "../services/room";
 
 export const getRooms = async (req: Request, res: Response) => {
   const rooms = await roomService.getRooms();
@@ -55,7 +56,8 @@ export const createRoom = async (
     id: roomId,
     name,
     host: self,
-    players: [self],
+    state: ROOM_STATE.CREATED,
+    players: [{ ...self, ready: PLAYER_STATE.NOT_READY }],
     config: {
       ...defaultRoomConfig,
       ...(isNil(config) ? {} : config),
@@ -85,7 +87,7 @@ export const joinRoom = async (
   }
   await roomService.updateRoom({
     ...room,
-    players: [...room.players, self],
+    players: [...room.players, { ...self, ready: PLAYER_STATE.NOT_READY }],
   });
   res.status(HTTP_STATUS_CODES.NO_CONTENT).send();
 };
@@ -154,7 +156,7 @@ export const addNewPlayerToRoom = async (
   }
   await roomService.updateRoom({
     ...room,
-    players: [...room.players, player],
+    players: [...room.players, { ...player, ready: PLAYER_STATE.NOT_READY }],
   });
   res.status(HTTP_STATUS_CODES.NO_CONTENT).send();
 };

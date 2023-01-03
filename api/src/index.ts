@@ -1,14 +1,14 @@
-import runPrivateApp from "./app/private";
-import runPubicApp from "./app/public";
+import { connect as connectToRedis } from "./config/redis";
 import env from "./config/env";
+import app from "./app";
 
 (async () => {
   try {
-    if (env.PUBLIC) {
-      await runPubicApp();
-    } else {
-      await runPrivateApp();
-    }
+    await connectToRedis();
+    const port = env.PORT || 8080;
+    app.listen(env.PORT || 8080, () => {
+      console.log(`Server is running at http://localhost:${port}`);
+    });
   } catch (error) {
     console.log(error);
     process.exit(1);

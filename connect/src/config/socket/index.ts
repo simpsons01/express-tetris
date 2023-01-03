@@ -312,12 +312,8 @@ class ConnectSocket {
               await roomService.deleteRoom(roomId);
             } else {
               if (room.state === ROOM_STATE.GAME_START) {
-                const _ = roomUtils.createNewRoomState(
-                  room,
-                  ROOM_STATE.GAME_INTERRUPT
-                );
                 await roomService.updateRoom(
-                  roomUtils.createNewRoomRemovedPlayer(_, playerId)
+                  roomUtils.createNewRoomState(room, ROOM_STATE.GAME_INTERRUPT)
                 );
                 if (roomTimerUtils.hasRoomTimer(roomId)) {
                   const roomTimer = roomTimerUtils.getRoomTimer(
@@ -332,6 +328,8 @@ class ConnectSocket {
                   playerStore.resetScore();
                 }
                 this.io.in(roomId).emit("room_participant_leave");
+              } else {
+                await roomService.updateRoom(newRoom);
               }
             }
           } else {

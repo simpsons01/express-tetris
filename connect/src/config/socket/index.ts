@@ -1,26 +1,20 @@
-import { hasRoomTimer, IRoomTimer } from "./../../utils/roomTimer";
 import { Server as SocketServer, Socket } from "socket.io";
-import {
-  createRoom,
-  hasRoom,
-  deleteRoom,
-  getRoom,
-  IRoom,
-  ROOM_STATE,
-} from "../../utils/room";
-import { createPlayer } from "../../utils/player";
-import {
-  getRoomTimer,
-  createRoomTimer,
-  DEFAULT_BEFORE_GAME_START_LEFT_SEC,
-  deleteRoomTimer,
-} from "../../utils/roomTimer";
-import * as authService from "../../services/auth";
 import * as roomService from "../../services/room";
+import * as playerService from "../../services/player";
+import * as roomUtils from "../../utils/room";
+import * as roomTimerUtils from "../../utils/roomTimer";
+import * as playerStoreUtils from "../../utils/playerStore";
+import {
+  DEFAULT_BEFORE_GAME_START_LEFT_SEC,
+  IRoomTimer,
+} from "../../utils/roomTimer";
+import { IPlayerStore } from "../../utils/playerStore";
 import { Server as HttpServer } from "http";
 import { AnyFunction, AnyObject } from "../../utils/types";
 import { isNil, is, isEmpty } from "ramda";
 import { ExtendedError } from "socket.io/dist/namespace";
+import { verify as verifyToken } from "../../utils/token";
+import { ROOM_STATE } from "../../services/room";
 
 // TODO: 創建socket的options不行是AnyObject
 type SocketServerOptions = AnyObject;
@@ -58,7 +52,7 @@ const withDone =
     if (is(Function, done)) done(arg);
   };
 
-class GameSocket {
+class ConnectSocket {
   io: SocketServer;
 
   constructor(httpServer: HttpServer, options: SocketServerOptions) {
@@ -72,9 +66,11 @@ class GameSocket {
   ) {
     const token = socket.handshake.auth.token;
     const query = socket.handshake.query;
+
     if (isNil(token) || isEmpty(token)) {
       return next(new Error("token is required"));
     }
+
     if (
       isNil(query) ||
       isNil(query.roomId) ||
@@ -83,6 +79,7 @@ class GameSocket {
     ) {
       return next(new Error("miss required query"));
     }
+
     const connectSockets = await this.io.fetchSockets();
     for (const connectSocket of connectSockets) {
       if (query.playerId === connectSocket.data.player.id) {
@@ -90,22 +87,29 @@ class GameSocket {
         return;
       }
     }
+
     try {
-      await authService.checkAuth(token);
+      const decode = verifyToken(token);
+      const player = await playerService.getPlayer(decode.name);
+      if (isNil(player)) {
+        return next(new Error("auth failed"));
+      }
+      socket.data.player = player;
     } catch (err) {
       return next(new Error("auth failed"));
     }
+
     try {
-      const { data: room } = await roomService.getRoom(query.roomId as string);
-      socket.data = {
-        room,
-        player: {
-          name: query.playerName,
-          id: query.playerId,
-        },
+      const room = await roomService.getRoom(query.roomId as string);
+      if (isNil(room)) {
+        return next(new Error("get room failed"));
+      }
+      socket.data.room = {
+        id: room.id,
+        config: room.config,
       };
     } catch (err) {
-      return next(new Error("get room Failed failed"));
+      return next(new Error("get room failed"));
     }
 
     next();
@@ -113,193 +117,247 @@ class GameSocket {
 
   listen(): void {
     this.io.on("connection", (socket) => {
-      const player = createPlayer(
-        socket.data.player.name,
-        socket.data.player.id
-      );
-      if (hasRoom(socket.data.room.id)) {
-        const room = getRoom(socket.data.room.id) as IRoom;
-        room.addPlayer(player);
-      } else {
-        createRoom(socket.data.room.id, {
-          hostId: player.id,
-          config: socket.data.room.config,
-          players: [player],
-        });
-      }
-      socket.join(socket.data.room.id);
+      const roomId = socket.data.room.id;
+      const roomConfig = socket.data.room.config;
+      const playerId = socket.data.player.id;
 
-      const startGame = (room: IRoom, roomId: string) => {
-        room.updateState(ROOM_STATE.GAME_BEFORE_START);
-        const roomTimer = hasRoomTimer(roomId)
-          ? (getRoomTimer(roomId) as IRoomTimer)
-          : createRoomTimer(roomId);
+      socket.join(roomId);
+      const playerStore = playerStoreUtils.hasPlayerStore(roomId)
+        ? (playerStoreUtils.getPlayerStore(roomId) as IPlayerStore)
+        : playerStoreUtils.createPlayerStore(roomId);
+      playerStore.addPlayer(playerId);
+
+      const handleRoomError = (self = true) => {
+        if (self) {
+          handleRoomError();
+        } else {
+          handleRoomError(false);
+        }
+      };
+
+      const handleBeforeStartGame = () => {
+        const roomTimer = roomTimerUtils.hasRoomTimer(roomId)
+          ? (roomTimerUtils.getRoomTimer(roomId) as IRoomTimer)
+          : roomTimerUtils.createRoomTimer(roomId);
         roomTimer.startBeforeGameStartCountDown(
           DEFAULT_BEFORE_GAME_START_LEFT_SEC,
           (leftSec: number) => {
             this.io.in(roomId).emit("before_start_game", leftSec);
           },
-          () => {
-            roomTimer.clearBeforeGameStartCountDown();
-            room.updateState(ROOM_STATE.GAME_START);
-            this.io.in(roomId).emit("game_start");
-            roomTimer.startGameEndCountDown(
-              room.config.sec,
-              (leftSec: number) => {
-                this.io.in(roomId).emit("game_leftSec", leftSec);
-              },
-              () => {
-                room.updateState(ROOM_STATE.GAME_END);
-                roomTimer.clearGameEndCountDown();
-                const result = room.getResult();
-                this.io.in(roomId).emit("game_over", result);
-              }
-            );
-          }
+          async () => await handleStartGame()
         );
       };
 
-      socket.on("ready", (done) => {
-        const roomId = socket.data.room.id;
-        const room = getRoom(roomId);
-        if (!isNil(room)) {
-          if (room.state === ROOM_STATE.CREATED) {
-            room.updatePlayerToReady(socket.data.player.id);
-            withDone(done)(createResponse({}, { isSuccess: true }));
-            if (room.isRoomReady()) startGame(room, roomId);
+      const handleStartGame = async () => {
+        try {
+          const roomTimer = roomTimerUtils.getRoomTimer(roomId);
+          if (!isNil(roomTimer)) {
+            roomTimer.clearBeforeGameStartCountDown();
+            const room = await roomService.getRoom(roomId);
+            if (!isNil(room)) {
+              await roomService.updateRoom(
+                roomUtils.createNewRoomState(room, ROOM_STATE.GAME_START)
+              );
+              this.io.in(roomId).emit("game_start");
+              roomTimer.startGameEndCountDown(
+                roomConfig.sec,
+                (leftSec: number) => {
+                  this.io.in(roomId).emit("game_leftSec", leftSec);
+                },
+                async () => {
+                  await handleEndGame();
+                }
+              );
+            } else {
+              handleRoomError(false);
+            }
           } else {
-            socket.emit("error_occur");
+            handleRoomError(false);
           }
-        } else {
-          withDone(done)(
-            createResponse(
-              {},
-              { isSuccess: false, message: "ROOM IS NOT EXIST" }
-            )
-          );
-          socket.emit("error_occur");
+        } catch (error) {
+          handleRoomError(false);
+        }
+      };
+
+      const handleEndGame = async () => {
+        try {
+          const roomTimer = roomTimerUtils.getRoomTimer(roomId);
+          if (!isNil(roomTimer)) {
+            roomTimer.clearGameEndCountDown();
+            const room = await roomService.getRoom(roomId);
+            if (!isNil(room)) {
+              await roomService.updateRoom(
+                roomUtils.createNewRoomState(room, ROOM_STATE.GAME_END)
+              );
+              const playerStore = playerStoreUtils.getPlayerStore(roomId);
+              if (!isNil(playerStore)) {
+                const result = playerStore.getResult();
+                this.io.in(roomId).emit("game_over", result);
+                playerStoreUtils.deletePlayerStore(roomId);
+              } else {
+                handleRoomError(false);
+              }
+            } else {
+              handleRoomError(false);
+            }
+          } else {
+            handleRoomError(false);
+          }
+        } catch (error) {
+          handleRoomError(false);
+        }
+      };
+
+      socket.on("ready", async (done) => {
+        try {
+          const room = await roomService.getRoom(roomId);
+          if (!isNil(room)) {
+            if (room.state === ROOM_STATE.CREATED) {
+              const newRoom = roomUtils.createNewRoomPlayerToReady(
+                room,
+                socket.data.player.id
+              );
+              await roomService.updateRoom(newRoom);
+              withDone(done)(createResponse({}, { isSuccess: true }));
+              if (roomUtils.checkRoomPlayersAreReady(newRoom)) {
+                handleBeforeStartGame();
+              }
+            } else {
+              handleRoomError();
+            }
+          } else {
+            withDone(done)(
+              createResponse(
+                {},
+                { isSuccess: false, message: "ROOM IS NOT EXIST" }
+              )
+            );
+            handleRoomError();
+          }
+        } catch (error) {
+          handleRoomError();
         }
       });
 
       socket.on("game_data_updated", async (updatedPayloads) => {
-        const roomId = socket.data.room.id;
-        const playerId = socket.data.player.id;
-        const room = getRoom(roomId);
-        if (!isNil(room)) {
+        const playerStore = playerStoreUtils.getPlayerStore(roomId);
+        if (!isNil(playerStore)) {
           socket.to(roomId).emit("other_game_data_updated", updatedPayloads);
           const scorePayload = updatedPayloads.find(
             (payload) => payload.type === "SCORE"
           );
           if (!isNil(scorePayload)) {
-            room.updatePlayerScore(playerId, scorePayload.data);
+            playerStore.updateScore(playerId, scorePayload.data);
           }
         } else {
-          socket.emit("error_occur");
+          handleRoomError();
         }
       });
 
       socket.on("get_room_config", async (done) => {
-        const roomId = socket.data.room.id;
-        const room = getRoom(roomId);
-        if (!isNil(room)) {
-          withDone(done)(
-            createResponse(
-              { initialLevel: room.config.initialLevel },
-              { isSuccess: true }
-            )
-          );
-        } else {
-          withDone(done)(createResponse({}, { isSuccess: false }));
-          socket.emit("error_occur");
-        }
+        withDone(done)(
+          createResponse(
+            { initialLevel: roomConfig.initialLevel },
+            { isSuccess: true }
+          )
+        );
       });
 
       socket.on("ping", (cb) => cb());
 
       socket.on("reset_room", async (done) => {
-        const roomId = socket.data.room.id;
         try {
-          await roomService.getRoom(roomId);
-          const room = getRoom(roomId);
+          const room = await roomService.getRoom(roomId);
           if (!isNil(room)) {
-            if (hasRoomTimer(roomId)) {
-              const roomTimer = getRoomTimer(roomId) as IRoomTimer;
+            if (roomTimerUtils.hasRoomTimer(roomId)) {
+              const roomTimer = roomTimerUtils.getRoomTimer(
+                roomId
+              ) as IRoomTimer;
               roomTimer.clear();
-              deleteRoomTimer(roomId);
+              roomTimerUtils.deleteRoomTimer(roomId);
             }
             if (room.state !== ROOM_STATE.CREATED) {
-              room.updateState(ROOM_STATE.CREATED);
-              room.reset();
+              const _ = roomUtils.createNewRoomState(room, ROOM_STATE.CREATED);
+              const newRoom = roomUtils.createNewRoomPlayersToNotReady(_);
+              await roomService.updateRoom(newRoom);
             }
             withDone(done)(createResponse({}, { isSuccess: true }));
           } else {
             withDone(done)(createResponse({}, { isSuccess: false }));
-            socket.emit("error_occur");
+            handleRoomError();
           }
         } catch (err) {
           console.log(err);
-          socket.emit("error_occur");
+          handleRoomError();
         }
       });
 
       socket.on("disconnect", async () => {
-        const roomId = socket.data.room.id;
-        const playerId = socket.data.player.id;
-        const room = getRoom(roomId);
-        if (!isNil(room)) {
-          room.removePlayer(playerId);
-          const isRoomEmpty = room.isRoomEmpty();
-          const isHost = room.hostId === playerId;
-          if (isRoomEmpty || isHost) {
-            if (hasRoomTimer(roomId)) {
-              const roomTimer = getRoomTimer(roomId) as IRoomTimer;
-              roomTimer.clear();
-              deleteRoomTimer(roomId);
-            }
-            deleteRoom(roomId);
-            if (isHost) this.io.in(roomId).emit("room_host_leave");
-          } else {
-            if (
-              room.state === ROOM_STATE.GAME_START ||
-              room.state === ROOM_STATE.GAME_BEFORE_START
-            ) {
-              room.updateState(ROOM_STATE.GAME_INTERRUPT);
-              if (hasRoomTimer(roomId)) {
-                const roomTimer = getRoomTimer(roomId) as IRoomTimer;
-                roomTimer.clear();
-              }
-              this.io.in(roomId).emit("room_participant_leave");
-            }
-          }
-        }
         try {
-          await roomService.removePlayerFromRoom({
-            roomId,
-            playerName: socket.data.player.name,
-          });
-        } catch (err) {
-          console.log(err);
+          const room = await roomService.getRoom(roomId);
+          if (!isNil(room)) {
+            const newRoom = roomUtils.createNewRoomRemovedPlayer(
+              room,
+              playerId
+            );
+            const isNewRoomEmpty = roomUtils.checkRoomIsEmpty(newRoom);
+            const isHost = room.host.id === playerId;
+            if (isNewRoomEmpty || isHost) {
+              if (roomTimerUtils.hasRoomTimer(roomId)) {
+                const roomTimer = roomTimerUtils.getRoomTimer(
+                  roomId
+                ) as IRoomTimer;
+                roomTimer.clear();
+                roomTimerUtils.deleteRoomTimer(roomId);
+              }
+              if (isHost) this.io.in(roomId).emit("room_host_leave");
+              await roomService.deleteRoom(roomId);
+            } else {
+              if (room.state === ROOM_STATE.GAME_START) {
+                await roomService.updateRoom(
+                  roomUtils.createNewRoomState(
+                    newRoom,
+                    ROOM_STATE.GAME_INTERRUPT
+                  )
+                );
+                if (roomTimerUtils.hasRoomTimer(roomId)) {
+                  const roomTimer = roomTimerUtils.getRoomTimer(
+                    roomId
+                  ) as IRoomTimer;
+                  roomTimer.clear();
+                }
+                this.io.in(roomId).emit("room_participant_leave");
+              }
+            }
+          } else {
+            handleRoomError(false);
+          }
+        } catch (error) {
+          //
         }
       });
     });
   }
 }
 
-let gameSocketInstance: GameSocket | undefined;
+let socketInstance: ConnectSocket | undefined;
 
 export default {
-  initialize(httpServer: HttpServer, options: SocketServerOptions): GameSocket {
-    if (gameSocketInstance === undefined) {
-      gameSocketInstance = new GameSocket(httpServer, options);
+  initialize(
+    httpServer: HttpServer,
+    options: SocketServerOptions
+  ): ConnectSocket {
+    if (socketInstance === undefined) {
+      socketInstance = new ConnectSocket(httpServer, options);
     } else {
       console.warn("tetris game socket service is initialized");
     }
-    return gameSocketInstance;
+    return socketInstance;
   },
-  getInstance(): GameSocket | undefined {
-    if (gameSocketInstance === undefined) {
+  getInstance(): ConnectSocket | undefined {
+    if (socketInstance === undefined) {
       console.warn("tetris game socket service is not initialized");
     }
-    return gameSocketInstance;
+    return socketInstance;
   },
 };

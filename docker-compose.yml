@@ -1,24 +1,15 @@
 version: "3.9"
 
 services:
-  public-api-service:
+  api-service:
     build:
       context: ./api
-      dockerfile: Dockerfile.public.developnment
+      dockerfile: Dockerfile.developnment
     volumes:
       - ./api:/app
       - /app/node_modules/
     ports:
       - "9229:9229"
-  private-api-service:
-    build:
-      context: ./api
-      dockerfile: Dockerfile.private.developnment
-    volumes:
-      - ./api:/app
-      - /app/node_modules/
-    ports:
-      - "9228:9229"
   connect-service:
     build:
       context: ./connect

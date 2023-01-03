@@ -7,12 +7,26 @@ export type RoomConfig = {
   playerLimitNum: number;
   sec: number;
 };
+
+export enum ROOM_STATE {
+  CREATED,
+  GAME_START,
+  GAME_INTERRUPT,
+  GAME_END,
+}
+
+export enum PLAYER_STATE {
+  READY = "ready",
+  NOT_READY = "not_ready",
+}
+
 interface IRoom {
   id: string;
   name: string;
   host: IPlayer;
   config: RoomConfig;
-  players: Array<IPlayer>;
+  state: ROOM_STATE;
+  players: Array<IPlayer & { ready: PLAYER_STATE }>;
 }
 
 export const getRoomIds = async (): Promise<Array<string>> => {
@@ -55,7 +69,7 @@ export const createRoom = async (room: IRoom) => {
 
 export const updateRoom = async (room: IRoom) => {
   const redis = getRedisClient();
-  await redis.set(room.id, JSON.stringify(room));
+  await redis.set(`room:${room.id}`, JSON.stringify(room));
 };
 
 export const deleteRoom = async (roomId: string) => {

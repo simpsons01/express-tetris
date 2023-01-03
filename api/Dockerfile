@@ -1,4 +1,4 @@
-FROM node:16-alpine AS BUILD
+FROM node:16.7-alpine as BUILD
 
 WORKDIR /app/
 
@@ -10,11 +10,11 @@ COPY . .
 
 RUN npm run build
 
-FROM node:16-alpine
+FROM node:16.7-alpine
 
 WORKDIR /app/
 
-ENV PORT=8181
+ENV PORT=8080
 
 EXPOSE ${PORT}
 
@@ -23,7 +23,5 @@ COPY --from=BUILD /app/dist /app/dist/
 COPY package.json .
 
 RUN npm install --production
-
-COPY . .
 
 CMD ["npm", "run", "start"]  

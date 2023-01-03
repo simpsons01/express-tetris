@@ -1,28 +1,21 @@
 import http from "http";
-import cors from "cors";
-import express from "express";
-import bodyParser from "body-parser";
-import gameSocket from "./config/socket";
+import app from "./app";
+import socket from "./config/socket";
 import env from "./config/env";
-import { isDev } from "./utils/index";
+import { connect as connectToRedis } from "./config/redis";
 
-const run = async () => {
+(async () => {
   try {
-    const app = express();
+    await connectToRedis();
     const httpServer = http.createServer(app);
-    if (!isDev()) app.set("trust proxy", true);
-    app.use(cors({ origin: env.ALLOW_ORIGIN }));
-    app.use(bodyParser.json());
-    app.use(bodyParser.urlencoded({ extended: false }));
-    const gameSocketInstance = gameSocket.initialize(httpServer, {
+    const socketInstance = socket.initialize(httpServer, {
       path: "/connect/socket.io",
       cors: {
         origin: env.ALLOW_ORIGIN,
       },
     });
-    gameSocketInstance.listen();
-    app.get("/connect/health-check", (req, res) => res.status(200).end());
-    const port = env.PORT || 3030;
+    socketInstance.listen();
+    const port = env.PORT || 8080;
     httpServer.listen(port, () =>
       console.log(`Server is running at http://localhost:${port}`)
     );
@@ -30,6 +23,4 @@ const run = async () => {
     console.log(error);
     process.exit(1);
   }
-};
-
-run();
+})();

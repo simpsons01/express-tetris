@@ -28,7 +28,7 @@ fi
 
 aws ecr get-login-password --region ${REGION} | docker login --username AWS --password-stdin ${ACCOUNT_ID}.dkr.ecr.${REGION}.amazonaws.com
 
-docker build . -f Dockerfile.public -t ${DOCKER_IMAGE_TAG}
+docker build . -f Dockerfile -t ${DOCKER_IMAGE_TAG}
 
 docker tag ${DOCKER_IMAGE_TAG} ${ACCOUNT_ID}.dkr.ecr.${REGION}.amazonaws.com/${ECR_REPO}:${DOCKER_IMAGE_TAG}
 

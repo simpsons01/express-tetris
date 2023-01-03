@@ -312,11 +312,12 @@ class ConnectSocket {
               await roomService.deleteRoom(roomId);
             } else {
               if (room.state === ROOM_STATE.GAME_START) {
+                const _ = roomUtils.createNewRoomState(
+                  room,
+                  ROOM_STATE.GAME_INTERRUPT
+                );
                 await roomService.updateRoom(
-                  roomUtils.createNewRoomState(
-                    newRoom,
-                    ROOM_STATE.GAME_INTERRUPT
-                  )
+                  roomUtils.createNewRoomRemovedPlayer(_, playerId)
                 );
                 if (roomTimerUtils.hasRoomTimer(roomId)) {
                   const roomTimer = roomTimerUtils.getRoomTimer(

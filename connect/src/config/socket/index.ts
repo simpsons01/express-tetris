@@ -144,37 +144,25 @@ class ConnectSocket {
           (leftSec: number) => {
             this.io.in(roomId).emit("before_start_game", leftSec);
           },
-          async () => await handleStartGame()
+          handleStartGame
         );
       };
 
-      const handleStartGame = async () => {
-        try {
-          const roomTimer = roomTimerUtils.getRoomTimer(roomId);
-          if (!isNil(roomTimer)) {
-            roomTimer.clearBeforeGameStartCountDown();
-            const room = await roomService.getRoom(roomId);
-            if (!isNil(room)) {
-              await roomService.updateRoom(
-                roomUtils.createNewRoomState(room, ROOM_STATE.GAME_START)
-              );
-              this.io.in(roomId).emit("game_start");
-              roomTimer.startGameEndCountDown(
-                roomConfig.sec,
-                (leftSec: number) => {
-                  this.io.in(roomId).emit("game_leftSec", leftSec);
-                },
-                async () => {
-                  await handleEndGame();
-                }
-              );
-            } else {
-              handleError(false);
+      const handleStartGame = () => {
+        const roomTimer = roomTimerUtils.getRoomTimer(roomId);
+        if (!isNil(roomTimer)) {
+          roomTimer.clearBeforeGameStartCountDown();
+          this.io.in(roomId).emit("game_start");
+          roomTimer.startGameEndCountDown(
+            roomConfig.sec,
+            (leftSec: number) => {
+              this.io.in(roomId).emit("game_leftSec", leftSec);
+            },
+            async () => {
+              await handleEndGame();
             }
-          } else {
-            handleError(false);
-          }
-        } catch (error) {
+          );
+        } else {
           handleError(false);
         }
       };
@@ -217,10 +205,15 @@ class ConnectSocket {
                 room,
                 socket.data.player.id
               );
-              await roomService.updateRoom(newRoom);
-              withDone(done)(createResponse({}, { isSuccess: true }));
               if (roomUtils.checkRoomPlayersAreReady(newRoom)) {
+                await roomService.updateRoom(
+                  roomUtils.createNewRoomState(newRoom, ROOM_STATE.GAME_START)
+                );
+                withDone(done)(createResponse({}, { isSuccess: true }));
                 handleBeforeStartGame();
+              } else {
+                await roomService.updateRoom(newRoom);
+                withDone(done)(createResponse({}, { isSuccess: true }));
               }
             } else {
               handleError();
@@ -308,12 +301,15 @@ class ConnectSocket {
               if (playerStoreUtils.hasPlayerStore(roomId)) {
                 playerStoreUtils.deletePlayerStore(roomId);
               }
-              if (isHost) this.io.in(roomId).emit("room_host_leave");
               await roomService.deleteRoom(roomId);
+              if (isHost) this.io.in(roomId).emit("room_host_leave");
             } else {
               if (room.state === ROOM_STATE.GAME_START) {
                 await roomService.updateRoom(
-                  roomUtils.createNewRoomState(room, ROOM_STATE.GAME_INTERRUPT)
+                  roomUtils.createNewRoomState(
+                    newRoom,
+                    ROOM_STATE.GAME_INTERRUPT
+                  )
                 );
                 if (roomTimerUtils.hasRoomTimer(roomId)) {
                   const roomTimer = roomTimerUtils.getRoomTimer(

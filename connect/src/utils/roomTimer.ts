@@ -84,7 +84,3 @@ export const getRoomTimer = (id: string): IRoomTimer | undefined =>
 export const deleteRoomTimer = (id: string): void => {
   store.delete(id);
 };
-
-export const hasRoomTimer = (id: string): boolean => {
-  return !isNil(store.get(id));
-};

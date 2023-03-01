@@ -21,6 +21,6 @@ export default {
     await redisClient.sAdd("rooms", id);
   },
   deleteId: async (id: string) => {
-    await redisClient.del(`room:${id}`);
+    await redisClient.sRem("rooms", id);
   },
 };

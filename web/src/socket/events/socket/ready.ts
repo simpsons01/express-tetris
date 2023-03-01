@@ -125,6 +125,9 @@ export default (io: SocketServer, socket: Socket) => {
         );
         verifyCallback(callback)(
           createSocketCallbackPayload({
+            data: {
+              players: newRoom.players
+            },
             metadata: { status: EVENT_OPERATION_STATUS.SUCCESS },
           })
         );

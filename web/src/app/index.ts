@@ -13,6 +13,7 @@ import { createResponseError } from "../utils/error";
 import { isDev } from "../utils/common";
 
 const app = express();
+app.disable('x-powered-by')
 app.set("trust proxy", true);
 if (isDev()) {
   app.use(

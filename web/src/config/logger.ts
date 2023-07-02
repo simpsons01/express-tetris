@@ -1,5 +1,6 @@
 import { createLogger, format, transports } from "winston";
 import { isDev } from "../utils/common";
+import os from "os"
 
 const logger = createLogger({
   format: format.combine(
@@ -21,8 +22,10 @@ if (isDev()) {
   logger.add(
     new transports.File({
       level: "info",
-      filename: "InfoLog",
+      filename: `${os.homedir()}/server-log/InfoLog`,
       format: format.combine(
+        format.colorize(), 
+        format.simple(),
         format((info) => (info.level === "error" ? false : info))()
       ),
     })
@@ -30,7 +33,8 @@ if (isDev()) {
   logger.add(
     new transports.File({
       level: "error",
-      filename: "ErrorLog"
+      format: format.combine(format.colorize(), format.simple()),
+      filename: `${os.homedir()}/server-log/ErrorLog`
     })
   );
 }

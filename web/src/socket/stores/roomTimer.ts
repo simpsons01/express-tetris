@@ -1,4 +1,4 @@
-import { RoomTimer } from "../../utils/roomTimer";
+import { RoomTimer } from "../../common/roomTimer";
 
 export class RoomTimerStore extends Map<string, RoomTimer> {
   create(id: string): RoomTimer {

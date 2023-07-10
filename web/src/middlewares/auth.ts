@@ -1,9 +1,9 @@
 import type { Response, Request, NextFunction } from "express";
 import type { JwtPayload } from "jsonwebtoken";
-import HTTP_STATUS_CODES from "../utils/httpStatusCode";
+import HTTP_STATUS_CODES from "../common/httpStatusCode";
 import playerService from "../services/player";
-import { verifyToken } from "./../utils/token";
-import { createResponseError } from "../utils/error";
+import { verifyToken } from "../common/token";
+import { createResponseError } from "../common/error";
 import { isNil, is } from "ramda";
 
 const authMiddleware = async (

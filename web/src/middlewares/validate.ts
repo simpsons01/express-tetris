@@ -1,7 +1,7 @@
 import type { Response, Request, NextFunction } from "express";
 import type { ObjectSchema } from "joi";
-import HTTP_STATUS_CODES from "../utils/httpStatusCode";
-import { createResponseError } from "../utils/error";
+import HTTP_STATUS_CODES from "../common/httpStatusCode";
+import { createResponseError } from "../common/error";
 import { isNil } from "ramda";
 
 const validateMiddleware =

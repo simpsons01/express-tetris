@@ -1,10 +1,10 @@
 import type { Server as SocketServer, Socket } from "socket.io";
-import type { AnyFunction } from "../../../utils/types";
+import type { AnyFunction } from "../../../common/types";
 import {
   verifyCallback,
   createSocketCallbackPayload,
   EVENT_OPERATION_STATUS,
-} from "../../../utils/socket";
+} from "../../../common/socket";
 
 export default (io: SocketServer, socket: Socket) => {
   const roomConfig = socket.data.roomConfig;

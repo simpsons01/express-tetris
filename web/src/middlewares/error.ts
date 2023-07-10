@@ -1,7 +1,7 @@
 import type { Response, Request, NextFunction } from "express";
-import HTTP_STATUS_CODES from "../utils/httpStatusCode";
+import HTTP_STATUS_CODES from "../common/httpStatusCode";
 import logger from "../config/logger";
-import { isResponseError, createResponseError } from "./../utils/error";
+import { isResponseError, createResponseError } from "../common/error";
 import { isNil } from "ramda";
 
 const errorMiddleware = async (

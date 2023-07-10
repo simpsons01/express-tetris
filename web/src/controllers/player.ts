@@ -1,11 +1,11 @@
 import type { Response, Request, NextFunction } from "express";
-import type { IPlayer } from "../utils/types";
-import HTTP_STATUS_CODES from "../utils/httpStatusCode";
+import type { IPlayer } from "../common/types";
+import HTTP_STATUS_CODES from "../common/httpStatusCode";
 import playerService from "../services/player";
 import { isNil } from "ramda";
-import { signToken } from "../utils/token";
-import { createResponseError } from "../utils/error";
-import { createPlayer as createPlayer } from "../utils/player";
+import { signToken } from "../common/token";
+import { createResponseError } from "../common/error";
+import { createPlayer as createPlayer } from "../common/player";
 
 export const getPlayer = async (req: Request, res: Response) => {
   const self = req.player as IPlayer;

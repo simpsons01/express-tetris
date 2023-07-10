@@ -1,7 +1,7 @@
-import type { IPlayer } from "../utils/types";
+import type { IPlayer } from "../common/types";
 import Player from "../models/player";
 import { isNil } from "ramda";
-import { toHex } from "../utils/common";
+import { toHex } from "../common/utils";
 
 const getPlayer = async (playerName: string): Promise<IPlayer | null> => {
   const playerNameHex = toHex(playerName);

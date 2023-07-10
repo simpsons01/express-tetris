@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { catchAsyncError } from "../utils/error";
+import { catchAsyncError } from "../common/error";
 import * as playerController from "../controllers/player";
 import validateMiddleware from "../middlewares/validate";
 import { createPlayerSchema } from "../validations/player";

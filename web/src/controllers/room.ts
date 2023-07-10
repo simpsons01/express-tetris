@@ -1,15 +1,15 @@
 import type { Response, Request, NextFunction } from "express";
-import type { IPlayer } from "../utils/types";
-import HTTP_STATUS_CODES from "../utils/httpStatusCode";
+import type { IPlayer } from "../common/types";
+import HTTP_STATUS_CODES from "../common/httpStatusCode";
 import roomService from "../services/room";
-import { createResponseError } from "./../utils/error";
+import { createResponseError } from "../common/error";
 import {
   checkPlayerIsInRoom,
   checkRoomIsFull,
   createNewRoom,
   createNewRoomJoinedPlayer,
   createNewRoomRemovedPlayer,
-} from "./../utils/room";
+} from "../common/room";
 import { isEmpty, isNil } from "ramda";
 
 export const getRooms = async (req: Request, res: Response) => {

@@ -4,13 +4,13 @@ import express from "express";
 import bodyParser from "body-parser";
 import env from "../config/env";
 import errorMiddleware from "../middlewares/error";
-import HTTP_STATUS_CODES from "../utils/httpStatusCode";
+import HTTP_STATUS_CODES from "../common/httpStatusCode";
 import roomRoute from "../routes/room";
 import playerRoute from "../routes/player";
 import morgon from "morgan";
 import logger from "../config/logger";
-import { createResponseError } from "../utils/error";
-import { isDev } from "../utils/common";
+import { createResponseError } from "../common/error";
+import { isDev } from "../common/utils";
 
 const app = express();
 app.disable('x-powered-by')

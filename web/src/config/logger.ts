@@ -1,5 +1,5 @@
 import { createLogger, format, transports } from "winston";
-import { isDev } from "../utils/common";
+import { isDev } from "../common/utils";
 import os from "os"
 
 const logger = createLogger({

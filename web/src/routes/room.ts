@@ -1,4 +1,4 @@
-import { catchAsyncError } from "../utils/error";
+import { catchAsyncError } from "../common/error";
 import { Router } from "express";
 import * as roomController from "../controllers/room";
 import authMiddleware from "../middlewares/auth";

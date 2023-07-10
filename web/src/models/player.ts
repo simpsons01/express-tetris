@@ -1,5 +1,5 @@
 import type { SetOptions } from "redis";
-import type { IPlayer } from "../utils/types";
+import type { IPlayer } from "../common/types";
 import redisClient from "../config/redis";
 
 export default {

@@ -4,7 +4,7 @@ import env from "./config/env";
 import app from "./app";
 import logger from "./config/logger";
 import http from "http";
-import { isDev } from "./utils/common";
+import { isDev } from "./common/utils";
 
 (async () => {
   try {

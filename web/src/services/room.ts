@@ -1,4 +1,4 @@
-import type { IRoom } from "../utils/types";
+import type { IRoom } from "../common/types";
 import { isNil } from "ramda";
 import Room from "../models/room";
 

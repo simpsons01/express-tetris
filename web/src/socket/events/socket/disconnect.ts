@@ -8,8 +8,8 @@ import {
   createNewRoomRemovedPlayer,
   checkRoomIsEmpty,
   createNewRoomState,
-} from "../../../utils/room";
-import { ROOM_STATE } from "../../../utils/types";
+} from "../../../common/room";
+import { ROOM_STATE } from "../../../common/types";
 
 export default (io: SocketServer, socket: Socket) => {
   const roomId = socket.data.roomId;

@@ -1,19 +1,19 @@
-import type { AnyFunction } from "../../../utils/types";
+import type { AnyFunction } from "../../../common/types";
 import type { Server as SocketServer, Socket } from "socket.io";
-import type { IRoom } from "../../../utils/types";
+import type { IRoom } from "../../../common/types";
 import roomService from "../../../services/room";
 import logger from "../../../config/logger";
 import {
   pipeCreateNewRoomFn,
   createNewRoomState,
   createNewRoomPlayersToNotReady,
-} from "../../../utils/room";
+} from "../../../common/room";
 import {
   verifyCallback,
   EVENT_OPERATION_STATUS,
   createSocketCallbackPayload,
-} from "../../../utils/socket";
-import { ROOM_STATE } from "../../../utils/types";
+} from "../../../common/socket";
+import { ROOM_STATE } from "../../../common/types";
 import { isNil } from "ramda";
 
 export default (io: SocketServer, socket: Socket) => {

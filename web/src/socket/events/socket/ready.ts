@@ -1,6 +1,6 @@
-import type { AnyFunction } from "../../../utils/types";
+import type { AnyFunction } from "../../../common/types";
 import type { Server as SocketServer, Socket } from "socket.io";
-import type { IRoom } from "../../../utils/types";
+import type { IRoom } from "../../../common/types";
 import roomService from "../../../services/room";
 import roomTimerStore from "../../stores/roomTimer";
 import scoreUpdateOperationManagerStore from "../../stores/scoreUpdateOperationManager";
@@ -12,17 +12,17 @@ import {
   checkRoomPlayersAreReady,
   getResult,
   createNewRoomPlayerScoreToZero,
-} from "../../../utils/room";
+} from "../../../common/room";
 import {
   DEFAULT_BEFORE_GAME_START_LEFT_SEC,
-} from "../../../utils/roomTimer";
+} from "../../../common/roomTimer";
 import {
   verifyCallback,
   EVENT_OPERATION_STATUS,
   createSocketCallbackPayload,
-} from "../../../utils/socket";
+} from "../../../common/socket";
 import { isNil } from "ramda";
-import { ROOM_STATE } from "../../../utils/types";
+import { ROOM_STATE } from "../../../common/types";
 
 export default (io: SocketServer, socket: Socket) => {
   const roomId = socket.data.roomId;

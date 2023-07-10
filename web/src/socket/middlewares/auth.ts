@@ -4,8 +4,8 @@ import type { JwtPayload } from "jsonwebtoken";
 import roomService from "../../services/room";
 import playerService from "../../services/player";
 import { isNil, isEmpty } from "ramda";
-import { verifyToken } from "../../utils/token";
-import { checkPlayerIsInRoom } from "../../utils/room";
+import { verifyToken } from "../../common/token";
+import { checkPlayerIsInRoom } from "../../common/room";
 
 export const authMiddleware =
   (io: SocketServer) =>

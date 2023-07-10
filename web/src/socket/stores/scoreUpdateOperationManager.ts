@@ -1,4 +1,4 @@
-import ScoreUpdateOperationManager from "../../utils/scoreUpdateOperationManager";
+import ScoreUpdateOperationManager from "../../common/scoreUpdateOperationManager";
 
 export class ScoreUpdateMangerOperationStore extends Map<
   string,

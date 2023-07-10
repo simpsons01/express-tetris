@@ -2,7 +2,7 @@ import { Server as SocketServer, Socket } from "socket.io";
 import scoreUpdateOperationManagerStore from "../../stores/scoreUpdateOperationManager";
 import logger from "../../../config/logger";
 import roomService from "../../../services/room";
-import { createNewRoomPlayerScore } from "../../../utils/room";
+import { createNewRoomPlayerScore } from "../../../common/room";
 import { isNil } from "ramda";
 
 enum GAME_STATE_TYPE {

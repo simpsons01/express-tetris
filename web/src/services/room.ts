@@ -1,14 +1,14 @@
 import type { IRoom } from "../common/types";
 import { isNil } from "ramda";
-import Room from "../models/room";
+import redisClient from "../config/redis";
 
 const getRoomIds = async (): Promise<Array<string>> => {
-  const roomIds = await Room.getIds();
+  const roomIds = await redisClient.sMembers("rooms");
   return roomIds ?? [];
 };
 
 const getRoom = async (roomId: string): Promise<IRoom | null> => {
-  const room = await Room.get(roomId);
+  const room = await redisClient.get(`room:${roomId}`);
   if (!isNil(room)) {
     try {
       return JSON.parse(room) as IRoom;
@@ -33,17 +33,17 @@ const getRooms = async (): Promise<Array<IRoom>> => {
 };
 
 const createRoom = async (room: IRoom) => {
-  await Room.create(room.id, room);
-  await Room.createId(room.id);
+  await redisClient.set(`room:${room.id}`, JSON.stringify(room));
+  await redisClient.sAdd("rooms", room.id);
 };
 
 const updateRoom = async (room: IRoom) => {
-  await Room.update(room.id, room);
+  await redisClient.set(`room:${room.id}`, JSON.stringify(room));
 };
 
 const deleteRoom = async (roomId: string) => {
-  await Room.delete(roomId);
-  await Room.deleteId(roomId);
+  await redisClient.sRem("rooms", roomId);
+  await redisClient.del(`room:${roomId}`);
 };
 
 export default {

@@ -1,11 +1,11 @@
 import type { IPlayer } from "../common/types";
-import Player from "../models/player";
 import { isNil } from "ramda";
 import { toHex } from "../common/utils";
+import redisClient from "../config/redis";
 
 const getPlayer = async (playerName: string): Promise<IPlayer | null> => {
   const playerNameHex = toHex(playerName);
-  const resPlayer = await Player.get(playerNameHex);
+  const resPlayer = await redisClient.get(`player:${playerNameHex}`);
   if (!isNil(resPlayer)) {
     try {
       return JSON.parse(resPlayer) as IPlayer;
@@ -19,14 +19,14 @@ const getPlayer = async (playerName: string): Promise<IPlayer | null> => {
 
 const createPlayer = async (player: IPlayer) => {
   const playerNameHex = toHex(player.name);
-  await Player.create(playerNameHex, player, {
+  await redisClient.set(`player:${playerNameHex}`, JSON.stringify(player), {
     EX: 60 * 60,
   });
 };
 
 const deletePlayer = async (playerName: string) => {
   const playerNameHex = toHex(playerName);
-  await Player.delete(playerNameHex);
+  await redisClient.del(`player:${playerNameHex}`);
 };
 
 export default {

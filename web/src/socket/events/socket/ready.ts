@@ -13,9 +13,7 @@ import {
   getResult,
   createNewRoomPlayerScoreToZero,
 } from "../../../common/room";
-import {
-  DEFAULT_BEFORE_GAME_START_LEFT_SEC,
-} from "../../../common/roomTimer";
+import { DEFAULT_BEFORE_GAME_START_LEFT_SEC } from "../../../common/roomTimer";
 import {
   verifyCallback,
   EVENT_OPERATION_STATUS,
@@ -29,15 +27,15 @@ export default (io: SocketServer, socket: Socket) => {
   const roomConfig = socket.data.roomConfig;
 
   const onError = (error: unknown) => {
-    io.in(roomId).emit("error_occur", error)
-    logger.error(error)
-  }
+    io.in(roomId).emit("error_occur", error);
+    logger.error(error);
+  };
 
   const handleBeforeStartGame = () => {
     try {
       const roomTimer = roomTimerStore.get(roomId);
-      if(isNil(roomTimer)) {
-        throw new Error("roomTimer was not found");    
+      if (isNil(roomTimer)) {
+        throw new Error("roomTimer was not found");
       }
       roomTimer.startBeforeGameStartCountDown(
         DEFAULT_BEFORE_GAME_START_LEFT_SEC,
@@ -46,9 +44,8 @@ export default (io: SocketServer, socket: Socket) => {
         },
         handleStartGame
       );
-    }catch(error) {
-      io.in(roomId).emit("error_occur", error)
-      logger.error(error)
+    } catch (error) {
+      onError(error);
     }
   };
 
@@ -56,11 +53,11 @@ export default (io: SocketServer, socket: Socket) => {
     try {
       const room = await roomService.getRoom(roomId);
       const roomTimer = roomTimerStore.get(roomId);
-      if(isNil(roomTimer)) {
-        throw new Error("roomTimer was not found");    
+      if (isNil(roomTimer)) {
+        throw new Error("roomTimer was not found");
       }
-      if(isNil(room)) {
-        throw new Error("room was not found")
+      if (isNil(room)) {
+        throw new Error("room was not found");
       }
       roomTimer.clearBeforeGameStartCountDown();
       io.in(roomId).emit("game_start", room.players);
@@ -70,20 +67,21 @@ export default (io: SocketServer, socket: Socket) => {
           io.in(roomId).emit("game_leftSec", leftSec);
         },
         handleEndGame
-      )
-    }catch(error) {
-      onError(error)
+      );
+    } catch (error) {
+      onError(error);
     }
   };
 
   const handleEndGame = async () => {
     try {
       const roomTimer = roomTimerStore.get(roomId);
-      const scoreUpdateOperationManager = scoreUpdateOperationManagerStore.get(roomId);
-      if(isNil(roomTimer)) {
-        throw new Error("roomTimer was not found");    
+      const scoreUpdateOperationManager =
+        scoreUpdateOperationManagerStore.get(roomId);
+      if (isNil(roomTimer)) {
+        throw new Error("roomTimer was not found");
       }
-      if(isNil(scoreUpdateOperationManager)) {
+      if (isNil(scoreUpdateOperationManager)) {
         throw new Error("scoreUpdateOperationManager was not found");
       }
       roomTimer.clearGameEndCountDown();
@@ -99,32 +97,27 @@ export default (io: SocketServer, socket: Socket) => {
             await roomService.updateRoom(
               pipeCreateNewRoomFn(
                 room,
-                (room: IRoom) =>
-                  createNewRoomState(room, ROOM_STATE.GAME_END),
-                (room: IRoom) =>
-                  createNewRoomPlayerScoreToZero(room, ROOM_STATE.GAME_END)
+                (room: IRoom) => createNewRoomState(room, ROOM_STATE.GAME_END),
+                (room: IRoom) => createNewRoomPlayerScoreToZero(room)
               )
             );
           } else {
             throw new Error("room was not found");
           }
         } catch (error) {
-          onError(error)
+          onError(error);
         }
       };
       if (scoreUpdateOperationManager.isProcessing) {
-        scoreUpdateOperationManager.on(
-          "clear",
-          async function clearHandler() {
-            await endGameHandler();
-            scoreUpdateOperationManager.off("clear", clearHandler);
-          }
-        );
+        scoreUpdateOperationManager.on("clear", async function clearHandler() {
+          await endGameHandler();
+          scoreUpdateOperationManager.off("clear", clearHandler);
+        });
       } else {
         await endGameHandler();
       }
-    }catch(error) {
-      onError(error)
+    } catch (error) {
+      onError(error);
     }
   };
 
@@ -144,7 +137,7 @@ export default (io: SocketServer, socket: Socket) => {
         verifyCallback(callback)(
           createSocketCallbackPayload({
             data: {
-              players: newRoom.players
+              players: newRoom.players,
             },
             metadata: { status: EVENT_OPERATION_STATUS.SUCCESS },
           })
@@ -160,7 +153,7 @@ export default (io: SocketServer, socket: Socket) => {
         );
       }
     } catch (error) {
-      onError(error)
+      onError(error);
       verifyCallback(callback)(
         createSocketCallbackPayload({
           metadata: { status: EVENT_OPERATION_STATUS.FAILED },

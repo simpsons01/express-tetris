@@ -1,8 +1,7 @@
-import type { AnyFunction } from "../../../common/types";
 import type { Server as SocketServer, Socket } from "socket.io";
+import type { AnyFunction } from "../../../common/types";
 import type { IRoom } from "../../../common/types";
 import roomService from "../../../services/room";
-import logger from "../../../config/logger";
 import {
   pipeCreateNewRoomFn,
   createNewRoomState,
@@ -15,39 +14,46 @@ import {
 } from "../../../common/socket";
 import { ROOM_STATE } from "../../../common/types";
 import { isNil } from "ramda";
+import { SocketEvents } from "../event";
 
-export default (io: SocketServer, socket: Socket) => {
-  const roomId = socket.data.roomId;
+class ResetRoomEvent extends SocketEvents {
+  constructor(io: SocketServer, socket: Socket) {
+    super(io, socket);
+    this.listener = this.listener.bind(this);
+    this.logError = this.logError.bind(this);
+    this.logInfo = this.logInfo.bind(this);
+    this.onError = this.onError.bind(this);
+  }
 
-  return async (callback: AnyFunction | undefined) => {
+  async listener(callback: AnyFunction | undefined) {
     try {
-      const room = await roomService.getRoom(roomId);
-      if (!isNil(room)) {
-        if (room.state !== ROOM_STATE.CREATED) {
-          await roomService.updateRoom(
-            pipeCreateNewRoomFn(
-              room,
-              (room: IRoom) => createNewRoomState(room, ROOM_STATE.CREATED),
-              createNewRoomPlayersToNotReady
-            )
-          );
-        }
-        verifyCallback(callback)(
-          createSocketCallbackPayload({
-            metadata: { status: EVENT_OPERATION_STATUS.SUCCESS },
-          })
-        );
-      } else {
+      const room = await roomService.getRoom(this.roomId);
+      if (isNil(room)) {
         throw new Error("room was not found");
       }
+      if (room.state !== ROOM_STATE.CREATED) {
+        await roomService.updateRoom(
+          pipeCreateNewRoomFn(
+            room,
+            (room: IRoom) => createNewRoomState(room, ROOM_STATE.CREATED),
+            createNewRoomPlayersToNotReady
+          )
+        );
+      }
+      verifyCallback(callback)(
+        createSocketCallbackPayload({
+          metadata: { status: EVENT_OPERATION_STATUS.SUCCESS },
+        })
+      );
     } catch (err) {
-      logger.error(err);
+      this.onError(err as Error, false);
       verifyCallback(callback)(
         createSocketCallbackPayload({
           metadata: { status: EVENT_OPERATION_STATUS.FAILED },
         })
       );
-      socket.emit("error_occur");
     }
-  };
-};
+  }
+}
+
+export default ResetRoomEvent;

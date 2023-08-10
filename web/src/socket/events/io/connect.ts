@@ -1,21 +1,29 @@
 import type { Server as SocketServer, Socket } from "socket.io";
 import roomTimerStore from "../../stores/roomTimer";
 import scoreUpdateManagerStore from "../../stores/scoreUpdateOperationManager";
-import logger from "../../../config/logger";
-import disconnectEvt from "../socket/disconnect";
-import gameDataUpdatedEvt from "../socket/gameDataUpdated";
-import pingEvt from "../socket/ping";
-import resetRoomEvt from "../socket/resetRoom";
-import roomConfigEvt from "../socket/roomConfig";
-import readyEvt from "../socket/ready";
+import DisconnectEvent from "../socket/disconnect";
+import GameDataUpdatedEvent from "../socket/gameDataUpdated";
+import PingEvent from "../socket/ping";
+import ResetRoomEvent from "../socket/resetRoom";
+import RoomConfigEvent from "../socket/roomConfig";
+import ReadyEvent from "../socket/ready";
 import { isNil } from "ramda";
+import { IoEvents } from "../event";
 
-export default (io: SocketServer) => {
-  return async (socket: Socket) => {
+class ConnectEvents extends IoEvents {
+  constructor(io: SocketServer) {
+    super(io);
+    this.listener = this.listener.bind(this);
+    this.logError = this.logError.bind(this);
+    this.logInfo = this.logInfo.bind(this);
+    this.onError = this.onError.bind(this);
+  }
+
+  listener(socket: Socket) {
     const roomId = socket.data.roomId;
     const playerName = socket.data.player.name;
 
-    logger.info(`player "${playerName}" connect and join room ${roomId}`);
+    this.logInfo(`player "${playerName}" connect and join room ${roomId}`);
 
     socket.join(roomId);
 
@@ -29,11 +37,16 @@ export default (io: SocketServer) => {
       roomTimerStore.create(roomId);
     }
 
-    socket.on("ready", readyEvt(io, socket));
-    socket.on("game_data_updated", gameDataUpdatedEvt(io, socket));
-    socket.on("reset_room", resetRoomEvt(io, socket));
-    socket.on("room_config", roomConfigEvt(io, socket));
-    socket.on("ping", pingEvt(io, socket));
-    socket.on("disconnect", disconnectEvt(io, socket));
-  };
-};
+    socket.on("ready", new ReadyEvent(this._io, socket).listener);
+    socket.on(
+      "game_data_updated",
+      new GameDataUpdatedEvent(this._io, socket).listener
+    );
+    socket.on("reset_room", new ResetRoomEvent(this._io, socket).listener);
+    socket.on("room_config", new RoomConfigEvent(this._io, socket).listener);
+    socket.on("ping", new PingEvent(this._io, socket).listener);
+    socket.on("disconnect", new DisconnectEvent(this._io, socket).listener);
+  }
+}
+
+export default ConnectEvents;

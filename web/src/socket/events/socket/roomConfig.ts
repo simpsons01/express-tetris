@@ -5,20 +5,28 @@ import {
   createSocketCallbackPayload,
   EVENT_OPERATION_STATUS,
 } from "../../../common/socket";
+import { SocketEvents } from "../event";
 
-export default (io: SocketServer, socket: Socket) => {
-  const roomConfig = socket.data.roomConfig;
-
-  return (callback?: AnyFunction) => {
+class ResetConfigEvent extends SocketEvents {
+  constructor(io: SocketServer, socket: Socket) {
+    super(io, socket);
+    this.listener = this.listener.bind(this);
+    this.logError = this.logError.bind(this);
+    this.logInfo = this.logInfo.bind(this);
+    this.onError = this.onError.bind(this);
+  }
+  async listener(callback: AnyFunction | undefined) {
     verifyCallback(callback)(
       createSocketCallbackPayload({
         data: {
-          initialLevel: roomConfig.initialLevel,
+          initialLevel: this.roomConfig.initialLevel,
         },
         metadata: {
           status: EVENT_OPERATION_STATUS.SUCCESS,
         },
       })
     );
-  };
-};
+  }
+}
+
+export default ResetConfigEvent;

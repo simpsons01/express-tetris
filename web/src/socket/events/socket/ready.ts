@@ -1,10 +1,9 @@
-import type { AnyFunction } from "../../../common/types";
 import type { Server as SocketServer, Socket } from "socket.io";
+import type { AnyFunction } from "../../../common/types";
 import type { IRoom } from "../../../common/types";
 import roomService from "../../../services/room";
 import roomTimerStore from "../../stores/roomTimer";
 import scoreUpdateOperationManagerStore from "../../stores/scoreUpdateOperationManager";
-import logger from "../../../config/logger";
 import {
   pipeCreateNewRoomFn,
   createNewRoomState,
@@ -21,38 +20,42 @@ import {
 } from "../../../common/socket";
 import { isNil } from "ramda";
 import { ROOM_STATE } from "../../../common/types";
+import { SocketEvents } from "../event";
 
-export default (io: SocketServer, socket: Socket) => {
-  const roomId = socket.data.roomId;
-  const roomConfig = socket.data.roomConfig;
+class ReadyEvent extends SocketEvents {
+  constructor(io: SocketServer, socket: Socket) {
+    super(io, socket);
+    this.handleBeforeStartGame = this.handleBeforeStartGame.bind(this);
+    this.handleStartGame = this.handleStartGame.bind(this);
+    this.handleEndGame = this.handleEndGame.bind(this);
+    this.listener = this.listener.bind(this);
+    this.logError = this.logError.bind(this);
+    this.logInfo = this.logInfo.bind(this);
+    this.onError = this.onError.bind(this);
+  }
 
-  const onError = (error: unknown) => {
-    io.in(roomId).emit("error_occur", error);
-    logger.error(error);
-  };
-
-  const handleBeforeStartGame = () => {
+  handleBeforeStartGame() {
     try {
-      const roomTimer = roomTimerStore.get(roomId);
+      const roomTimer = roomTimerStore.get(this.roomId);
       if (isNil(roomTimer)) {
         throw new Error("roomTimer was not found");
       }
       roomTimer.startBeforeGameStartCountDown(
         DEFAULT_BEFORE_GAME_START_LEFT_SEC,
         (leftSec: number) => {
-          io.in(roomId).emit("before_start_game", leftSec);
+          this._io.in(this.roomId).emit("before_start_game", leftSec);
         },
-        handleStartGame
+        () => this.handleStartGame()
       );
     } catch (error) {
-      onError(error);
+      this.onError(error as Error);
     }
-  };
+  }
 
-  const handleStartGame = async () => {
+  async handleStartGame() {
     try {
-      const room = await roomService.getRoom(roomId);
-      const roomTimer = roomTimerStore.get(roomId);
+      const room = await roomService.getRoom(this.roomId);
+      const roomTimer = roomTimerStore.get(this.roomId);
       if (isNil(roomTimer)) {
         throw new Error("roomTimer was not found");
       }
@@ -60,24 +63,25 @@ export default (io: SocketServer, socket: Socket) => {
         throw new Error("room was not found");
       }
       roomTimer.clearBeforeGameStartCountDown();
-      io.in(roomId).emit("game_start", room.players);
+      this._io.in(this.roomId).emit("game_start", room.players);
       roomTimer.startGameEndCountDown(
-        roomConfig.sec,
+        this.roomConfig.sec,
         (leftSec: number) => {
-          io.in(roomId).emit("game_leftSec", leftSec);
+          this._io.in(this.roomId).emit("game_leftSec", leftSec);
         },
-        handleEndGame
+        () => this.handleEndGame()
       );
     } catch (error) {
-      onError(error);
+      this.onError(error as Error);
     }
-  };
+  }
 
-  const handleEndGame = async () => {
+  async handleEndGame() {
     try {
-      const roomTimer = roomTimerStore.get(roomId);
-      const scoreUpdateOperationManager =
-        scoreUpdateOperationManagerStore.get(roomId);
+      const roomTimer = roomTimerStore.get(this.roomId);
+      const scoreUpdateOperationManager = scoreUpdateOperationManagerStore.get(
+        this.roomId
+      );
       if (isNil(roomTimer)) {
         throw new Error("roomTimer was not found");
       }
@@ -87,25 +91,22 @@ export default (io: SocketServer, socket: Socket) => {
       roomTimer.clearGameEndCountDown();
       const endGameHandler = async () => {
         try {
-          const room = await roomService.getRoom(roomId);
-          if (!isNil(room)) {
-            const result = getResult(room);
-            io.in(roomId).emit("game_over", result);
-            logger.info(
-              `room "${roomId}" end and result is ${JSON.stringify(result)}`
-            );
-            await roomService.updateRoom(
-              pipeCreateNewRoomFn(
-                room,
-                (room: IRoom) => createNewRoomState(room, ROOM_STATE.GAME_END),
-                (room: IRoom) => createNewRoomPlayerScoreToZero(room)
-              )
-            );
-          } else {
+          const room = await roomService.getRoom(this.roomId);
+          if (isNil(room)) {
             throw new Error("room was not found");
           }
+          const result = getResult(room);
+          this._io.in(this.roomId).emit("game_over", result);
+          this.logInfo(`result is ${JSON.stringify(result)}`);
+          await roomService.updateRoom(
+            pipeCreateNewRoomFn(
+              room,
+              (room: IRoom) => createNewRoomState(room, ROOM_STATE.GAME_END),
+              (room: IRoom) => createNewRoomPlayerScoreToZero(room)
+            )
+          );
         } catch (error) {
-          onError(error);
+          this.onError(error as Error);
         }
       };
       if (scoreUpdateOperationManager.isProcessing) {
@@ -117,19 +118,19 @@ export default (io: SocketServer, socket: Socket) => {
         await endGameHandler();
       }
     } catch (error) {
-      onError(error);
+      this.onError(error as Error);
     }
-  };
+  }
 
-  return async (callback: AnyFunction | undefined) => {
+  async listener(callback: AnyFunction | undefined) {
     try {
-      const room = await roomService.getRoom(roomId);
+      const room = await roomService.getRoom(this.roomId);
       if (isNil(room)) {
         throw new Error("room was not found");
       } else if (room.state !== ROOM_STATE.CREATED) {
         throw new Error("room state was not in created");
       }
-      const newRoom = createNewRoomPlayerToReady(room, socket.data.player.id);
+      const newRoom = createNewRoomPlayerToReady(room, this.player.id);
       if (checkRoomPlayersAreReady(newRoom)) {
         await roomService.updateRoom(
           createNewRoomState(newRoom, ROOM_STATE.GAME_START)
@@ -142,8 +143,8 @@ export default (io: SocketServer, socket: Socket) => {
             metadata: { status: EVENT_OPERATION_STATUS.SUCCESS },
           })
         );
-        logger.info(`room "${roomId}" is about to start game`);
-        handleBeforeStartGame();
+        this.logInfo(`room is about to start game`);
+        this.handleBeforeStartGame();
       } else {
         await roomService.updateRoom(newRoom);
         verifyCallback(callback)(
@@ -153,12 +154,14 @@ export default (io: SocketServer, socket: Socket) => {
         );
       }
     } catch (error) {
-      onError(error);
+      this.onError(error as Error);
       verifyCallback(callback)(
         createSocketCallbackPayload({
           metadata: { status: EVENT_OPERATION_STATUS.FAILED },
         })
       );
     }
-  };
-};
+  }
+}
+
+export default ReadyEvent;

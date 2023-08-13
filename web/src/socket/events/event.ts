@@ -13,12 +13,14 @@ export abstract class IoEvents {
     logger.info(`[socket.io], ${message}`);
   }
 
-  logError(error: Error) {
-    error.message = `[socket.io], ${error.message}`;
+  logError(error: unknown) {
+    if (error instanceof Error) {
+      error.message = `[socket.io], ${error.message}`;
+    }
     logger.error(error);
   }
 
-  onError(error: Error) {
+  onError(error: unknown) {
     this._io.emit("error_occur", error);
     this.logError(error);
   }
@@ -34,30 +36,32 @@ export abstract class SocketEvents extends IoEvents {
     this._socket = socket;
   }
 
-  get roomId(): string {
-    return this._socket.data.roomId;
-  }
-
-  get roomConfig(): IRoom["config"] {
-    return this._socket.data.roomConfig;
-  }
-
-  get player(): IPlayer {
-    return this._socket.data.player;
+  get socketData(): {
+    roomId: string;
+    roomConfig: IRoom["config"];
+    player: IPlayer;
+  } {
+    return {
+      roomId: this._socket.data.roomId,
+      roomConfig: this._socket.data.roomConfig,
+      player: this._socket.data.player,
+    };
   }
 
   logInfo(message: string) {
-    logger.info(`[socket.io] roomId:${this.roomId}, ${message}`);
+    logger.info(`[socket.io] roomId:${this.socketData.roomId}, ${message}`);
   }
 
-  logError(error: Error) {
-    error.message = `[socket.io] roomId:${this.roomId}, ${error.message}`;
+  logError(error: unknown) {
+    if (error instanceof Error) {
+      error.message = `[socket.io] roomId:${this.socketData.roomId}, ${error.message}`;
+    }
     logger.error(error);
   }
 
-  onError(error: Error, shouldBroadcast = false) {
+  onError(error: unknown, shouldBroadcast = false) {
     if (shouldBroadcast) {
-      this._io.in(this.roomId).emit("error_occur", error);
+      this._io.in(this.socketData.roomId).emit("error_occur", error);
     } else {
       this._socket.emit("error_occur", error);
     }

@@ -19,7 +19,7 @@ class ResetConfigEvent extends SocketEvents {
     verifyCallback(callback)(
       createSocketCallbackPayload({
         data: {
-          initialLevel: this.roomConfig.initialLevel,
+          initialLevel: this.socketData.roomConfig.initialLevel,
         },
         metadata: {
           status: EVENT_OPERATION_STATUS.SUCCESS,

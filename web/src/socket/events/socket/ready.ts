@@ -35,15 +35,16 @@ class ReadyEvent extends SocketEvents {
   }
 
   handleBeforeStartGame() {
+    const { roomId } = this.socketData;
     try {
-      const roomTimer = roomTimerStore.get(this.roomId);
+      const roomTimer = roomTimerStore.get(roomId);
       if (isNil(roomTimer)) {
         throw new Error("roomTimer was not found");
       }
       roomTimer.startBeforeGameStartCountDown(
         DEFAULT_BEFORE_GAME_START_LEFT_SEC,
         (leftSec: number) => {
-          this._io.in(this.roomId).emit("before_start_game", leftSec);
+          this._io.in(roomId).emit("before_start_game", leftSec);
         },
         () => this.handleStartGame()
       );
@@ -53,9 +54,10 @@ class ReadyEvent extends SocketEvents {
   }
 
   async handleStartGame() {
+    const { roomId, roomConfig } = this.socketData;
     try {
-      const room = await roomService.getRoom(this.roomId);
-      const roomTimer = roomTimerStore.get(this.roomId);
+      const room = await roomService.getRoom(roomId);
+      const roomTimer = roomTimerStore.get(roomId);
       if (isNil(roomTimer)) {
         throw new Error("roomTimer was not found");
       }
@@ -63,11 +65,11 @@ class ReadyEvent extends SocketEvents {
         throw new Error("room was not found");
       }
       roomTimer.clearBeforeGameStartCountDown();
-      this._io.in(this.roomId).emit("game_start", room.players);
+      this._io.in(roomId).emit("game_start", room.players);
       roomTimer.startGameEndCountDown(
-        this.roomConfig.sec,
+        roomConfig.sec,
         (leftSec: number) => {
-          this._io.in(this.roomId).emit("game_leftSec", leftSec);
+          this._io.in(roomId).emit("game_leftSec", leftSec);
         },
         () => this.handleEndGame()
       );
@@ -77,11 +79,11 @@ class ReadyEvent extends SocketEvents {
   }
 
   async handleEndGame() {
+    const { roomId } = this.socketData;
     try {
-      const roomTimer = roomTimerStore.get(this.roomId);
-      const scoreUpdateOperationManager = scoreUpdateOperationManagerStore.get(
-        this.roomId
-      );
+      const roomTimer = roomTimerStore.get(roomId);
+      const scoreUpdateOperationManager =
+        scoreUpdateOperationManagerStore.get(roomId);
       if (isNil(roomTimer)) {
         throw new Error("roomTimer was not found");
       }
@@ -91,12 +93,12 @@ class ReadyEvent extends SocketEvents {
       roomTimer.clearGameEndCountDown();
       const endGameHandler = async () => {
         try {
-          const room = await roomService.getRoom(this.roomId);
+          const room = await roomService.getRoom(roomId);
           if (isNil(room)) {
             throw new Error("room was not found");
           }
           const result = getResult(room);
-          this._io.in(this.roomId).emit("game_over", result);
+          this._io.in(roomId).emit("game_over", result);
           this.logInfo(`result is ${JSON.stringify(result)}`);
           await roomService.updateRoom(
             pipeCreateNewRoomFn(
@@ -124,13 +126,14 @@ class ReadyEvent extends SocketEvents {
 
   async listener(callback: AnyFunction | undefined) {
     try {
-      const room = await roomService.getRoom(this.roomId);
+      const { roomId, player } = this.socketData;
+      const room = await roomService.getRoom(roomId);
       if (isNil(room)) {
         throw new Error("room was not found");
       } else if (room.state !== ROOM_STATE.CREATED) {
         throw new Error("room state was not in created");
       }
-      const newRoom = createNewRoomPlayerToReady(room, this.player.id);
+      const newRoom = createNewRoomPlayerToReady(room, player.id);
       if (checkRoomPlayersAreReady(newRoom)) {
         await roomService.updateRoom(
           createNewRoomState(newRoom, ROOM_STATE.GAME_START)
@@ -154,7 +157,7 @@ class ReadyEvent extends SocketEvents {
         );
       }
     } catch (error) {
-      this.onError(error as Error);
+      this.onError(error);
       verifyCallback(callback)(
         createSocketCallbackPayload({
           metadata: { status: EVENT_OPERATION_STATUS.FAILED },

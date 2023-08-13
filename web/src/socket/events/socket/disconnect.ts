@@ -21,50 +21,51 @@ class DisconnectEvent extends SocketEvents {
   }
 
   async listener() {
-    this.logInfo(`player "${this.player.name}" disconnect`);
+    const { player, roomId } = this.socketData;
+    this.logInfo(`player "${player.name}" disconnect`);
     try {
-      const room = await roomService.getRoom(this.roomId);
+      const room = await roomService.getRoom(roomId);
       if (isNil(room)) {
         throw new Error("room was not found");
       }
-      const selfLeaveRoom = createNewRoomRemovedPlayer(room, this.player.id);
+      const selfLeaveRoom = createNewRoomRemovedPlayer(room, player.id);
       const isNewRoomEmpty = checkRoomIsEmpty(selfLeaveRoom);
-      const isHost = room.host.id === this.player.id;
+      const isHost = room.host.id === player.id;
       if (isNewRoomEmpty || isHost) {
-        const roomTimer = roomTimerStore.get(this.roomId);
+        const roomTimer = roomTimerStore.get(roomId);
         if (!isNil(roomTimer)) {
           roomTimer.clear();
-          roomTimerStore.delete(this.roomId);
+          roomTimerStore.delete(roomId);
         }
         const scoreUpdateOperationManager =
-          scoreUpdateOperationManagerStore.get(this.roomId);
+          scoreUpdateOperationManagerStore.get(roomId);
         if (!isNil(scoreUpdateOperationManager)) {
           scoreUpdateOperationManager.clear();
-          scoreUpdateOperationManagerStore.delete(this.roomId);
+          scoreUpdateOperationManagerStore.delete(roomId);
         }
-        await roomService.deleteRoom(this.roomId);
-        if (isHost) this._io.in(this.roomId).emit("room_host_leave");
+        await roomService.deleteRoom(roomId);
+        if (isHost) this._io.in(roomId).emit("room_host_leave");
       } else {
         if (room.state === ROOM_STATE.GAME_START) {
           await roomService.updateRoom(
             createNewRoomState(selfLeaveRoom, ROOM_STATE.GAME_INTERRUPT)
           );
-          const roomTimer = roomTimerStore.get(this.roomId);
+          const roomTimer = roomTimerStore.get(roomId);
           if (!isNil(roomTimer)) {
             roomTimer.clear();
           }
           const scoreUpdateOperationManager =
-            scoreUpdateOperationManagerStore.get(this.roomId);
+            scoreUpdateOperationManagerStore.get(roomId);
           if (!isNil(scoreUpdateOperationManager)) {
             scoreUpdateOperationManager.clear();
           }
-          this._io.in(this.roomId).emit("room_participant_leave");
+          this._io.in(roomId).emit("room_participant_leave");
         } else {
           await roomService.updateRoom(selfLeaveRoom);
         }
       }
     } catch (error) {
-      this.onError(error as Error);
+      this.onError(error);
     }
   }
 }

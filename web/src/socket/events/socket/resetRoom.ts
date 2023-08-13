@@ -27,7 +27,8 @@ class ResetRoomEvent extends SocketEvents {
 
   async listener(callback: AnyFunction | undefined) {
     try {
-      const room = await roomService.getRoom(this.roomId);
+      const { roomId } = this.socketData;
+      const room = await roomService.getRoom(roomId);
       if (isNil(room)) {
         throw new Error("room was not found");
       }
@@ -46,7 +47,7 @@ class ResetRoomEvent extends SocketEvents {
         })
       );
     } catch (err) {
-      this.onError(err as Error, false);
+      this.onError(err, false);
       verifyCallback(callback)(
         createSocketCallbackPayload({
           metadata: { status: EVENT_OPERATION_STATUS.FAILED },

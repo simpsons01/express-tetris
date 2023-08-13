@@ -26,36 +26,34 @@ class GameDataUpdatedEvent extends SocketEvents {
   }
 
   async listener(updatedPayloads: UpdatePayloads) {
-    const scoreUpdateOperationManager = scoreUpdateOperationManagerStore.get(
-      this.roomId
-    );
+    const { player, roomId } = this.socketData;
+    const scoreUpdateOperationManager =
+      scoreUpdateOperationManagerStore.get(roomId);
     try {
       if (isNil(scoreUpdateOperationManager)) {
         throw new Error("scoreUpdateOperationManager was not found");
       }
-      this._socket
-        .to(this.roomId)
-        .emit("other_game_data_updated", updatedPayloads);
+      this._socket.to(roomId).emit("other_game_data_updated", updatedPayloads);
       const scorePayload = updatedPayloads.find(
         (payload) => payload.type === GAME_STATE_TYPE.SCORE
       );
       if (!isNil(scorePayload)) {
         scoreUpdateOperationManager.add(async () => {
           try {
-            const room = await roomService.getRoom(this.roomId);
+            const room = await roomService.getRoom(roomId);
             if (isNil(room)) {
               throw new Error("room was not found");
             }
             roomService.updateRoom(
-              createNewRoomPlayerScore(room, this.player.id, scorePayload.data)
+              createNewRoomPlayerScore(room, player.id, scorePayload.data)
             );
           } catch (error) {
-            this.onError(error as Error);
+            this.onError(error);
           }
         });
       }
     } catch (error) {
-      this.onError(error as Error);
+      this.onError(error);
     }
   }
 }

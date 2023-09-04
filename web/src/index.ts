@@ -13,8 +13,8 @@ const start = async () => {
       origin: env.ALLOW_ORIGIN,
     },
   });
-  const port = parseInt(env.PORT as string, 10);
-  const server = httpServer.listen(port, "0.0.0.0", () => {
+  const port = env.PORT;
+  const server = httpServer.listen(port, () => {
     logger.info(`Server is running at http://localhost:${port}`);
   });
   const stop = () => {

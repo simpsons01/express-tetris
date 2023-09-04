@@ -4,16 +4,20 @@ import env from "./config/env";
 import app from "./app";
 import logger from "./config/logger";
 import http from "http";
+import { isDev } from "./common/utils";
 
 const start = async () => {
   await redisClient.connect();
   const httpServer = http.createServer(app);
+  const port = env.PORT;
+  const allowOrigin = isDev()
+    ? env.ALLOW_ORIGIN
+    : `https://${env.ALLOW_ORIGIN}.onrender.com`;
   socket.initialize(httpServer, {
     cors: {
-      origin: env.ALLOW_ORIGIN,
+      origin: allowOrigin,
     },
   });
-  const port = env.PORT;
   const server = httpServer.listen(
     {
       port,

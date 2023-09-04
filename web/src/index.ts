@@ -4,7 +4,6 @@ import env from "./config/env";
 import app from "./app";
 import logger from "./config/logger";
 import http from "http";
-import { isDev } from "./common/utils";
 
 const start = async () => {
   await redisClient.connect();
@@ -14,16 +13,10 @@ const start = async () => {
       origin: env.ALLOW_ORIGIN,
     },
   });
-  const port = env.PORT;
-  const server = httpServer.listen(
-    {
-      port,
-      ...(isDev() ? {} : { host: "0.0.0.0" }),
-    },
-    () => {
-      logger.info(`Server is running at http://localhost:${port}`);
-    }
-  );
+  const port = parseInt(env.PORT as string, 10);
+  const server = httpServer.listen(port, "0.0.0.0", () => {
+    logger.info(`Server is running at http://localhost:${port}`);
+  });
   const stop = () => {
     return new Promise((resolve) => {
       redisClient

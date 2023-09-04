@@ -4,24 +4,25 @@ import env from "./config/env";
 import app from "./app";
 import logger from "./config/logger";
 import http from "http";
-import { isDev } from "./common/utils";
 
 const start = async () => {
   await redisClient.connect();
   const httpServer = http.createServer(app);
-  socket.initialize(httpServer, {
-    ...(isDev()
-      ? {
-          cors: {
-            origin: env.ALLOW_ORIGIN,
-          },
-        }
-      : {}),
-  });
   const port = env.PORT;
-  const server = httpServer.listen(port, () => {
-    logger.info(`Server is running at http://localhost:${port}`);
+  socket.initialize(httpServer, {
+    cors: {
+      origin: env.ALLOW_ORIGIN,
+    },
   });
+  const server = httpServer.listen(
+    {
+      port,
+      host: "0.0.0.0",
+    },
+    () => {
+      logger.info(`Server is running at http://localhost:${port}`);
+    }
+  );
   const stop = () => {
     return new Promise((resolve) => {
       redisClient

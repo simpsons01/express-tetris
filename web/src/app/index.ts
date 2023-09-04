@@ -10,19 +10,16 @@ import playerRoute from "../routes/player";
 import morgon from "morgan";
 import logger from "../config/logger";
 import { createResponseError } from "../common/error";
-import { isDev } from "../common/utils";
 
 const app = express();
-app.disable('x-powered-by')
+app.disable("x-powered-by");
 app.set("trust proxy", true);
-if (isDev()) {
-  app.use(
-    cors({
-      origin: env.ALLOW_ORIGIN,
-      allowedHeaders: ["Authorization", "Content-Type"],
-    })
-  );
-}
+app.use(
+  cors({
+    origin: env.ALLOW_ORIGIN,
+    allowedHeaders: ["Authorization", "Content-Type"],
+  })
+);
 
 app.use(
   morgon("common", {

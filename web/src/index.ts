@@ -10,18 +10,20 @@ const start = async () => {
   await redisClient.connect();
   const httpServer = http.createServer(app);
   socket.initialize(httpServer, {
-    ...(isDev()
-      ? {
-          cors: {
-            origin: env.ALLOW_ORIGIN,
-          },
-        }
-      : {}),
+    cors: {
+      origin: env.ALLOW_ORIGIN,
+    },
   });
   const port = env.PORT;
-  const server = httpServer.listen(port, () => {
-    logger.info(`Server is running at http://localhost:${port}`);
-  });
+  const server = httpServer.listen(
+    {
+      port,
+      ...(isDev() ? {} : { host: "0.0.0.0" }),
+    },
+    () => {
+      logger.info(`Server is running at http://localhost:${port}`);
+    }
+  );
   const stop = () => {
     return new Promise((resolve) => {
       redisClient

@@ -14,9 +14,16 @@ const start = async () => {
     },
   });
   const port = env.PORT;
-  const server = httpServer.listen(port, () => {
-    logger.info(`Server is running at http://localhost:${port}`);
-  });
+  console.log(`port value is ${port}`);
+  const server = httpServer.listen(
+    {
+      port,
+      host: "0.0.0.0",
+    },
+    () => {
+      logger.info(`Server is running at http://localhost:${port}`);
+    }
+  );
   const stop = () => {
     return new Promise((resolve) => {
       redisClient

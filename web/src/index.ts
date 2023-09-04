@@ -14,7 +14,6 @@ const start = async () => {
     },
   });
   const port = env.PORT;
-  console.log(`port value is ${port}`);
   const server = httpServer.listen(
     {
       port,
@@ -37,19 +36,19 @@ const start = async () => {
         });
     });
   };
-  // process.on("unhandledRejection", async (error) => {
-  //   logger.error(error);
-  //   await stop();
-  //   process.exit(1);
-  // });
-  // process.on("uncaughtException", async (error) => {
-  //   logger.error(error);
-  //   await stop();
-  //   process.exit(1);
-  // });
-  // process.on("SIGTERM", async () => {
-  //   await stop();
-  // });
+  process.on("unhandledRejection", async (error) => {
+    logger.error(error);
+    await stop();
+    process.exit(1);
+  });
+  process.on("uncaughtException", async (error) => {
+    logger.error(error);
+    await stop();
+    process.exit(1);
+  });
+  process.on("SIGTERM", async () => {
+    await stop();
+  });
 };
 
 start();

@@ -13,6 +13,7 @@ const start = async () => {
   const allowOrigin = isDev()
     ? env.ALLOW_ORIGIN
     : `https://${env.ALLOW_ORIGIN}.onrender.com`;
+
   socket.initialize(httpServer, {
     cors: {
       origin: allowOrigin,
